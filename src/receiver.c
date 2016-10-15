@@ -50,7 +50,7 @@ pkt_status_code codePkt;
 	Error 10 */
 void openFile(char* fileToOpen){
 	writeOnAFile = TRUE;
-	if (fopen(fileToOpen,"w")==NULL){
+	if ((fileToWrite = fopen(fileToOpen,"w"))==NULL){
 		fprintf(stderr, "Error receiver (10) : The file you try to use is not valid ( %s ) \n", fileToOpen);
 		exit(10);
 	}
