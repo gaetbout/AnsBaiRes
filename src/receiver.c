@@ -28,6 +28,7 @@ FILE *fileToWrite;
 
 // The socket to listen
 int sock;
+int nextSeqNum = 0;
 
 // Buffers for the packet and create ack
 char bufferPkt[MAX_PAYLOAD_SIZE+12];
@@ -61,7 +62,7 @@ void fillWindow(){
 	printf("fillWindow\n");
 	int i;
 	for (i =0;i<WINDOW_SIZE;i++){
-		windowPkt[i] = pkt_new();
+		windowPkt[i] = 0;
 	}
 }
 
@@ -104,10 +105,72 @@ ssize_t readPkt(const int sfd){
     }
 
     return rec;
-
-
 } 
 
+/* Method used to write pkts, write every valid pkt 
+	Return 0 if the length of pkt == 0 (Last pkt) */
+int writePkt(const int sfd, int currentPkt){
+	int i;
+	int ret=1;
+	for(i = currentPkt;i<WINDOW_SIZE;i++){
+		if(windowPkt[i]!=0){
+			if(writeOnAFile == TRUE){
+				if(write(fileno(stdout),windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
+                    fprintf(stderr, "Error : write(2)\n");
+				}
+			}else{
+	            if(write(sfd,windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
+    	            fprintf(stderr, "Error : write(1)\n");
+        	    }
+			}
+			if(pkt_get_length(windowPkt[i])==0){
+				ret=0;
+			}
+			pkt_del(windowPkt[i]);
+			windowPkt[i] = 0;
+
+		}else{
+			return 1;
+		}
+	}
+	
+	for(i = 0;i<currentPkt;i++){
+	if(windowPkt[i]!=0){
+			if(writeOnAFile == TRUE){
+				if(write(fileno(stdout),windowPkt[i],(int) pkt_get_length(windowPkt[i])) == -1){
+                    fprintf(stderr, "Error : write(2)\n");
+				}
+			}else{
+	            if(write(sfd,windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
+    	            fprintf(stderr, "Error : write(1)\n");
+        	    }
+			}
+		}else{
+			return 1;
+		}
+	}
+	return ret;
+}
+
+void sendAck(const int sfd){
+	pkt_t *ack = pkt_new();
+	pkt_set_type(ack,PTYPE_ACK);
+	pkt_set_window(ack,WINDOW_SIZE);
+	pkt_set_seqnum(ack,nextSeqNum+1);
+	pkt_set_length(ack,0);
+	char bufTmp[12];
+	size_t len = sizeof(bufTmp); 
+	if(pkt_encode(ack,bufTmp,&len) == PKT_OK){
+		fprintf(stderr, "ACK : %d\n",nextSeqNum+1);
+		if((write(sfd,bufTmp,12)) == -1){
+            fprintf(stderr, "Error : write(1)\n");
+       	}
+	}else{
+		fprintf(stderr, "Erreur receiver (30) : encode\n");
+		exit(30);
+	}
+   	pkt_del(ack);
+}
 
 int main (int argc, char * argv[]){
 	char c;
@@ -169,12 +232,36 @@ int main (int argc, char * argv[]){
     	codePkt = pkt_decode(bufferPkt,lengthRead,pktForThisLoop);
 
     	if(codePkt != PKT_OK){
-    		//TODO traiter packets
+    		//TODO traiter erreurs une à une
     		fprintf(stderr, "Error pkt_decode\n");
-    	}else{
+    	}else if( pkt_get_type(pktForThisLoop) == PTYPE_DATA){
+    		int seqNumReceived = pkt_get_seqnum(pktForThisLoop);
+    		fprintf(stderr, "SeqNum : %d\n",seqNumReceived);
+    		if(nextSeqNum==0){
+    			nextSeqNum = seqNumReceived; 
+    		}
+    		if(nextSeqNum==seqNumReceived){
+	    		windowPkt[nextSeqNum%WINDOW_SIZE] = pktForThisLoop;
+	    		if(writePkt(sock, nextSeqNum%WINDOW_SIZE) == 0){
+	    			keepListening = FALSE;
+	    		}
+    		}else if(seqNumReceived > nextSeqNum && seqNumReceived < nextSeqNum + WINDOW_SIZE){
+ 		   		windowPkt[nextSeqNum%WINDOW_SIZE] = pktForThisLoop;
+    		}
+    		sendAck(sock);
+    	}
+    	//Not a data type packet ==> ignored
+    	else{
 
     	}
     }
+
+    fprintf(stderr, "END OF FILE \n");
+
+    if(writeOnAFile == TRUE){
+    	fclose(fileToWrite);
+    }
+    return 0;
 }
 
 //TODO NUM NEXT_SEQ_NUM_EXPECTED
