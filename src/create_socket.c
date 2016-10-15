@@ -12,7 +12,7 @@
 
 int create_socket(struct sockaddr_in6 * source_addr, 
                   int src_port, struct sockaddr_in6 * dest_addr, int dst_port){
-    fprintf(stderr,"create_socket\n");
+    //fprintf(stderr,"create_socket\n");
     int sfd = fileno(stdin);
 
 	//bind la source car socket --> Local point
