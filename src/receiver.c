@@ -28,7 +28,7 @@ FILE *fileToWrite;
 
 // The socket to listen
 int sock;
-int nextSeqNum = 0;
+int nextSeqNum = -1;
 
 // Buffers for the packet and create ack
 char bufferPkt[MAX_PAYLOAD_SIZE+12];
@@ -237,7 +237,7 @@ int main (int argc, char * argv[]){
     	}else if( pkt_get_type(pktForThisLoop) == PTYPE_DATA){
     		int seqNumReceived = pkt_get_seqnum(pktForThisLoop);
     		fprintf(stderr, "SeqNum : %d\n",seqNumReceived);
-    		if(nextSeqNum==0){
+    		if(nextSeqNum==-1){
     			nextSeqNum = seqNumReceived; 
     		}
     		if(nextSeqNum==seqNumReceived){
