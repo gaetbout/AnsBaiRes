@@ -100,7 +100,7 @@ ssize_t readPkt(const int sfd){
 	    }
     }
     else{
-        fprintf(stderr, "No data for 5 secodnes\n");
+        fprintf(stderr, "No data for 5 seconds\n");
         if(writeOnAFile == TRUE){
     		fclose(fileToWrite);
     	}
@@ -112,18 +112,19 @@ ssize_t readPkt(const int sfd){
 
 /* Method used to write pkts, write every valid pkt 
 	Return 0 if the length of pkt == 0 (Last pkt) */
-int writePkt(const int sfd, int currentPkt){
+int writePkt(int currentPkt){
 	int i;
 	int ret=1;
 	for(i = currentPkt;i<WINDOW_SIZE;i++){
 		if(windowPkt[i]!=0){
+			fprintf(stderr, "length : %d\n", pkt_get_length(windowPkt[i]));
 			if(writeOnAFile == FALSE){
 				if(write(fileno(stdout),windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
-                    fprintf(stderr, "Error : write(2)\n");
+                    fprintf(stderr, "Error : write(1)\n");
 				}
 			}else{
-	            if(write(sfd,windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
-    	            fprintf(stderr, "Error : write(1)\n");
+	            if(fwrite(windowPkt[i],pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
+    	            fprintf(stderr, "Error : write(2)\n");
         	    }
 			}
 			if(pkt_get_length(windowPkt[i])==0){
@@ -141,11 +142,11 @@ int writePkt(const int sfd, int currentPkt){
 	if(windowPkt[i]!=0){
 			if(writeOnAFile == TRUE){
 				if(write(fileno(stdout),windowPkt[i],(int) pkt_get_length(windowPkt[i])) == -1){
-                    fprintf(stderr, "Error : write(2)\n");
+                    fprintf(stderr, "Error : write(3)\n");
 				}
 			}else{
-	            if(write(sfd,windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
-    	            fprintf(stderr, "Error : write(2)\n");
+	            if(fwrite(windowPkt[i],pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
+    	            fprintf(stderr, "Error : write(4)\n");
         	    }
 			}
 		}else{
@@ -166,7 +167,7 @@ void sendAck(const int sfd){
 	if(pkt_encode(ack,bufTmp,&len) == PKT_OK){
 		fprintf(stderr, "ACK : %d\n",nextSeqNum+1);
 		if((write(sfd,bufTmp,12)) == -1){
-            fprintf(stderr, "Error : write(3)\n");
+            fprintf(stderr, "Error : write(5)\n");
        	}
 	}else{
 		fprintf(stderr, "Erreur receiver (30) : encode\n");
@@ -245,7 +246,7 @@ int main (int argc, char * argv[]){
     		}
     		if(nextSeqNum==seqNumReceived){
 	    		windowPkt[nextSeqNum%WINDOW_SIZE] = pktForThisLoop;
-	    		if(writePkt(sock, nextSeqNum%WINDOW_SIZE) == 0){
+	    		if(writePkt(nextSeqNum%WINDOW_SIZE) == 0){
 	    			keepListening = FALSE;
 	    		}
     		}else if(seqNumReceived > nextSeqNum && seqNumReceived < nextSeqNum + WINDOW_SIZE){
