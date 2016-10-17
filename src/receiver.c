@@ -35,7 +35,7 @@ char bufferPkt[MAX_PAYLOAD_SIZE+12];
 char bufferAck[12];
 
 // Window for packets
-pkt_t *windowPkt[WINDOW_SIZE+1];
+pkt_t *windowPkt[WINDOW_SIZE];
 
 // Status code used on ultiple places
 pkt_status_code codePkt;
@@ -75,8 +75,9 @@ ssize_t readPkt(const int sfd){
     struct timeval tv;
     int retval;
     ssize_t rec=0;
-	socklen_t lengthSock = sizeof(sock);
 
+	struct sockaddr_in6 from;
+	socklen_t taille = sizeof(from);
     FD_ZERO(&rfds);
 
     /* Pendant 5 secondes maxi */
@@ -93,7 +94,16 @@ ssize_t readPkt(const int sfd){
     }
     else if (retval) {
         rec = recvfrom(sfd, bufferPkt, sizeof(bufferPkt), 
-				   0, (struct sockaddr *)&sfd, &lengthSock);
+				   0, (struct sockaddr *)&from, &taille);
+
+
+//TODO Faire que une seule fwa
+        if (connect(sfd, (struct sockaddr *) &from, 
+                sizeof(struct sockaddr_in6)) != 0){
+    		fprintf(stderr, "Error receiver (23) : connect\n");
+        	return -1;
+    	}
+
 	    if(rec ==-1){
     		fprintf(stderr,"Error receiver (21) : Connection failed\n");
     		exit(21);
@@ -111,16 +121,17 @@ ssize_t readPkt(const int sfd){
 } 
 
 void sendAck(const int sfd){
+	fprintf(stderr, "ACK SENT %d\n", currentSeqnum);
 	pkt_t *ack = pkt_new();
 	pkt_set_type(ack,PTYPE_ACK);
 	pkt_set_window(ack,WINDOW_SIZE);
-	pkt_set_seqnum(ack,(currentSeqnum+1)%WINDOW_SIZE);
+	pkt_set_seqnum(ack,(currentSeqnum)%WINDOW_SIZE);
 	pkt_set_length(ack,0);
 	char bufTmp[12];
 	size_t len = sizeof(bufTmp); 
 	if(pkt_encode(ack,bufTmp,&len) == PKT_OK){
-		fprintf(stderr, "ACK : %d\n",(currentSeqnum+1)%WINDOW_SIZE);
-		if((write(sfd,bufTmp,12)) == -1){
+		fprintf(stderr, "ACK : %d\n",(currentSeqnum)%WINDOW_SIZE);
+		if((write(sfd,bufTmp,len)) == -1){
             fprintf(stderr, "Error : write(5)\n");
        	}
 	}else{
@@ -254,14 +265,15 @@ int main (int argc, char * argv[]){
     		if(currentSeqnum==-1){
     			currentSeqnum = seqNumReceived; 
     		}
-			fprintf(stderr, "currentSeqnum %d\n", currentSeqnum);
-			fprintf(stderr, "seqNumReceived %d\n", seqNumReceived);
+			//fprintf(stderr, "currentSeqnum %d\n", currentSeqnum);
+			//fprintf(stderr, "seqNumReceived %d\n", seqNumReceived);
     		if(currentSeqnum == seqNumReceived){
-    			fprintf(stderr, "seqNumReceived - WINDOW_SIZE %d\n", seqNumReceived%WINDOW_SIZE);
+    			//fprintf(stderr, "seqNumReceived - WINDOW_SIZE %d\n", seqNumReceived%WINDOW_SIZE);
             	windowPkt[seqNumReceived%WINDOW_SIZE] = pktForThisLoop;
     			if(writePkt(seqNumReceived%WINDOW_SIZE) == 0){
 	    			keepListening = FALSE;
 	    		}
+	    		sendAck(sock);
     		}
         	if(currentSeqnum >= 256){
         		currentSeqnum = 0;
@@ -280,18 +292,3 @@ int main (int argc, char * argv[]){
     }
     return 0;
 }
-
-//TODO NUM NEXT_SEQ_NUM_EXPECTED
-
-/* Receiver while (true){
-		reçoit 
-		décode 
-			si error discard ack num next expected
-		Check si num seq expected 
-			si non : ack avec numéro expected + SIZE SLIDING WINDOW ATUELLE
-			si oui : Slide window et envoie next num expected 
-		
-		écrit le payload du/des packets
-	}
-
-*/
