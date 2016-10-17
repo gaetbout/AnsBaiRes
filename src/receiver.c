@@ -99,7 +99,7 @@ ssize_t readPkt(const int sfd){
 
 //TODO Faire que une seule fwa
         if (connect(sfd, (struct sockaddr *) &from, 
-                sizeof(struct sockaddr_in6)) != 0){
+                sizeof(struct sockaddr_in6)) != 0){ 
     		fprintf(stderr, "Error receiver (23) : connect\n");
         	return -1;
     	}
