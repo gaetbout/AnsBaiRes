@@ -42,7 +42,7 @@
 	pkt_status_code pkt_decode(const char *data, const size_t len, pkt_t *pkt)
 	{
 		//Check size buffer
-		if(len <=12){
+		if(len <12){
 			return E_NOMEM;
 		}
 

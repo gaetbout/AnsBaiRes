@@ -29,6 +29,7 @@ FILE *fileToWrite;
 // The socket to listen
 int sock;
 int currentSeqnum = -1;
+fd_set rfds;
 
 // Buffers for the packet and create ack
 char bufferPkt[MAX_PAYLOAD_SIZE+12];
@@ -71,14 +72,12 @@ void fillWindow(){
  * @return: the packet
  */
 ssize_t readPkt(const int sfd){
-	fd_set rfds;
     struct timeval tv;
     int retval;
     ssize_t rec=0;
 
 	struct sockaddr_in6 from;
 	socklen_t taille = sizeof(from);
-    FD_ZERO(&rfds);
 
     /* Pendant 5 secondes maxi */
     tv.tv_sec = 5;
@@ -251,6 +250,8 @@ int main (int argc, char * argv[]){
     //First we create every packets in the window 
     fillWindow();
 
+    FD_ZERO(&rfds);
+
     while(keepListening){
         /*Reset suite eu trigger du select*/ 
     	pkt_t *pktForThisLoop = pkt_new();
@@ -274,6 +275,9 @@ int main (int argc, char * argv[]){
 	    			keepListening = FALSE;
 	    		}
 	    		sendAck(sock);
+    		}else{
+    			
+    		fprintf(stderr, "zarezaeza\n");
     		}
         	if(currentSeqnum >= 256){
         		currentSeqnum = 0;

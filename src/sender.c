@@ -35,6 +35,7 @@ int windowSize = 1;
 pkt_t *windowPkt[MAX_WINDOW_SIZE];
 int currentSeqnum = 0;
 
+fd_set rfds;
 
 char buffReadGen[MAX_PAYLOAD_SIZE];
 
@@ -67,7 +68,7 @@ void fillWindow(){
 	    pkt_t* pktTmp = pkt_new();
 	    pkt_set_type(pktTmp,PTYPE_DATA);
 	    pkt_set_window(pktTmp,windowSize);
-	    pkt_set_seqnum(pktTmp,currentSeqnum);
+	    pkt_set_seqnum(pktTmp,i);
 	    pkt_set_length(pktTmp,size);
 	    pkt_set_payload(pktTmp,buffReadGen,size);
 		windowPkt[i] = pktTmp;
@@ -78,6 +79,8 @@ void sendPkt(int numToSend, int sock){
 	pkt_t *pktTmp = windowPkt[numToSend%MAX_WINDOW_SIZE];
 	char bufTmp[pkt_get_length(pktTmp) + 12];
 	size_t len = sizeof(bufTmp); 
+	printf("sendPkt PAYLOAD : %s\n",pkt_get_payload(pktTmp));
+	printf("sendPkt NUM : %d\n",pkt_get_seqnum(pktTmp));
     if(pkt_encode(pktTmp,bufTmp,&len) == PKT_OK){
     	if((write(sock,bufTmp,len)) == -1){
             fprintf(stderr, "Error : write(1)\n");
@@ -97,9 +100,9 @@ void sendPkt(int numToSend, int sock){
 int sendPkts(int sock){
 	printf("sendPkts\n");
 	int i;
-	
-	//Va do current seqnum et lit la size window
-	for (i = currentSeqnum; i<currentSeqnum+windowSize;i++){
+	// TODO Faire lorsque on sort de la size totale
+	int toStop = currentSeqnum;
+	for (i = currentSeqnum; i<toStop+windowSize;i++){
 		pkt_t *pktTmp = windowPkt[i];
 		if(pktTmp != 0){
 			sendPkt(i,sock);
@@ -111,13 +114,10 @@ int sendPkts(int sock){
 }
 
 int readForAck(int sfd){
-	fd_set rfds;
     struct timeval tv;
     int retval;
     ssize_t rec=0;
 	socklen_t lengthSock = sizeof(sfd);
-
-    FD_ZERO(&rfds);
 
     /* Pendant 5 secondes maxi */
     tv.tv_sec = 5;
@@ -129,18 +129,14 @@ int readForAck(int sfd){
     retval = select(FD_SETSIZE, &rfds, NULL, NULL, &tv);
 	/* Considérer tv comme indéfini maintenant ! */
 
-	printf("ds\n");
 
     if (retval == -1){
         fprintf(stderr, "Error receiver (20): select\n");
     }
     else if (retval) {
-		printf("dssdq\n");
 		char bufferAck[12];
-		printf("dssdq\n");
         rec = recvfrom(sfd, bufferAck, sizeof(bufferAck), 
 				   0, (struct sockaddr *)&sfd, &lengthSock);
-		printf("dsqsd\n");
 
 	    if(rec ==-1){
     		fprintf(stderr,"Error receiver (21) : Connection failed\n");
@@ -153,10 +149,12 @@ int readForAck(int sfd){
 
 		if(codePkt != PKT_OK){
     		//TODO traiter erreurs une à une
-    		fprintf(stderr, "Error pkt_decode\n");
+    		fprintf(stderr, "Error receiver (22) : decode failed\n");
+    		exit(22);
     	}else if( pkt_get_type(ack) == PTYPE_ACK){
-			fprintf(stderr, "currentSeqnum %d\n", pkt_get_seqnum(ack));
-    		
+    		windowSize = pkt_get_window(ack);
+    		fprintf(stderr, "WINDOW ACK : %d\n",windowSize);
+    		//sendPkts(sfd);
     	}
     	//Not a data type packet ==> ignored
     	else{
@@ -165,8 +163,7 @@ int readForAck(int sfd){
 
     }
     else{
-		printf("ezrzr\n");
-        sendPkt(currentSeqnum,sfd);
+        //sendPkt(currentSeqnum,sfd);
     }
 
     return rec;
@@ -227,25 +224,14 @@ int main (int argc, char * argv[]){
 	
 	fillWindow();
 
+    FD_ZERO(&rfds);
+
     while(keepListening){
 	    
 
     	keepListening = sendPkts(sock);
 
     	readForAck(sock);
-	    
-
-	 	struct timespec tim, tim2;
-		tim.tv_sec = 0;
-		tim.tv_nsec = 500000;
-
-	   if(nanosleep(&tim , &tim2) < 0 )   
-	   {
-	      printf("Nano sleep system call failed \n");
-	      return -1;
-	   }
-
-
 
     }
 }
