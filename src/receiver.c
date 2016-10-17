@@ -28,7 +28,7 @@ FILE *fileToWrite;
 
 // The socket to listen
 int sock;
-int nextSeqNum = -1;
+int currentSeqnum = -1;
 
 // Buffers for the packet and create ack
 char bufferPkt[MAX_PAYLOAD_SIZE+12];
@@ -110,69 +110,16 @@ ssize_t readPkt(const int sfd){
     return rec;
 } 
 
-/* Method used to write pkts, write every valid pkt 
-	Return 0 if the length of pkt == 0 (Last pkt) */
-int writePkt(int currentPkt){
-	int i;
-	int ret=1;
-	for(i = currentPkt;i<WINDOW_SIZE;i++){
-		if(windowPkt[i]!=0){
-			fprintf(stderr, "length : %d\n", pkt_get_length(windowPkt[i]));
-			if(writeOnAFile == FALSE){
-				if(write(fileno(stdout),windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
-                    fprintf(stderr, "Error : write(1)\n");
-				}
-			}else{
-	            if(fwrite(pkt_get_payload(windowPkt[i]),pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
-    	            fprintf(stderr, "Error : write(2)\n");
-        	    }
-			}
-			if(pkt_get_length(windowPkt[i])==0){
-				ret=0;
-			}
-			pkt_del(windowPkt[i]);
-			windowPkt[i] = 0;
-			nextSeqNum++;
-		}else{
-			return 1;
-		}
-	}
-	
-	for(i = 0;i<currentPkt;i++){
-		if(windowPkt[i]!=0){
-			fprintf(stderr, "length : %d\n", pkt_get_length(windowPkt[i]));
-			if(writeOnAFile == FALSE){
-				if(write(fileno(stdout),windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
-                    fprintf(stderr, "Error : write(1)\n");
-				}
-			}else{
-	            if(fwrite(pkt_get_payload(windowPkt[i]),pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
-    	            fprintf(stderr, "Error : write(2)\n");
-        	    }
-			}
-			if(pkt_get_length(windowPkt[i])==0){
-				ret=0;
-			}
-			pkt_del(windowPkt[i]);
-			windowPkt[i] = 0;
-			nextSeqNum++;
-		}else{
-			return 1;
-		}
-	}
-	return ret;
-}
-
 void sendAck(const int sfd){
 	pkt_t *ack = pkt_new();
 	pkt_set_type(ack,PTYPE_ACK);
 	pkt_set_window(ack,WINDOW_SIZE);
-	pkt_set_seqnum(ack,nextSeqNum+1);
+	pkt_set_seqnum(ack,(currentSeqnum+1)%WINDOW_SIZE);
 	pkt_set_length(ack,0);
 	char bufTmp[12];
 	size_t len = sizeof(bufTmp); 
 	if(pkt_encode(ack,bufTmp,&len) == PKT_OK){
-		fprintf(stderr, "ACK : %d\n",nextSeqNum+1);
+		fprintf(stderr, "ACK : %d\n",(currentSeqnum+1)%WINDOW_SIZE);
 		if((write(sfd,bufTmp,12)) == -1){
             fprintf(stderr, "Error : write(5)\n");
        	}
@@ -181,6 +128,63 @@ void sendAck(const int sfd){
 		exit(30);
 	}
    	pkt_del(ack);
+}
+
+
+/* Method used to write pkts, write every valid pkt 
+	Return 0 if the length of pkt == 0 (Last pkt) */
+int writePkt(int currentPkt){
+	int i;
+	int ret=1;
+	for(i = currentPkt;i<WINDOW_SIZE;i++){
+
+		if(windowPkt[i]!=0){
+			fprintf(stderr, "B1 currentPkt : %d\n",i);
+			if(writeOnAFile == FALSE){
+				if(write(fileno(stdout),windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
+                    fprintf(stderr, "Error : write(1)\n");
+				}
+			}else{
+	            if(fwrite(pkt_get_payload(windowPkt[i]),pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
+    	            fprintf(stderr, "Error : write(2)\n");
+        	    }
+			}
+			if(pkt_get_length(windowPkt[i])==0){
+				ret=0;
+			}
+    		currentSeqnum++;
+    		//sendAck(sock);
+			pkt_del(windowPkt[i]);
+			windowPkt[i] = 0;
+		}else{
+			return 1;
+		}
+	}
+	
+	for(i = 0;i<currentPkt;i++){
+		if(windowPkt[i]!=0){
+			fprintf(stderr, "B2 currentPkt : %d\n",i);
+			if(writeOnAFile == FALSE){
+				if(write(fileno(stdout),windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
+                    fprintf(stderr, "Error : write(1)\n");
+				}
+			}else{
+	            if(fwrite(pkt_get_payload(windowPkt[i]),pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
+    	            fprintf(stderr, "Error : write(2)\n");
+        	    }
+			}
+			if(pkt_get_length(windowPkt[i])==0){
+				ret=0;
+			}
+    		currentSeqnum++;
+    		//sendAck(sock);
+			pkt_del(windowPkt[i]);
+			windowPkt[i] = 0;
+		}else{
+			return 1;
+		}
+	}
+	return ret;
 }
 
 int main (int argc, char * argv[]){
@@ -247,19 +251,21 @@ int main (int argc, char * argv[]){
     		fprintf(stderr, "Error pkt_decode\n");
     	}else if( pkt_get_type(pktForThisLoop) == PTYPE_DATA){
     		int seqNumReceived = pkt_get_seqnum(pktForThisLoop);
-    		fprintf(stderr, "SeqNum : %d\n",seqNumReceived);
-    		if(nextSeqNum==-1){
-    			nextSeqNum = seqNumReceived; 
+    		if(currentSeqnum==-1){
+    			currentSeqnum = seqNumReceived; 
     		}
-    		if(nextSeqNum==seqNumReceived){
-	    		windowPkt[nextSeqNum%WINDOW_SIZE] = pktForThisLoop;
-	    		if(writePkt(nextSeqNum%WINDOW_SIZE) == 0){
+			fprintf(stderr, "currentSeqnum %d\n", currentSeqnum);
+			fprintf(stderr, "seqNumReceived %d\n", seqNumReceived);
+    		if(currentSeqnum == seqNumReceived){
+    			fprintf(stderr, "seqNumReceived - WINDOW_SIZE %d\n", seqNumReceived%WINDOW_SIZE);
+            	windowPkt[seqNumReceived%WINDOW_SIZE] = pktForThisLoop;
+    			if(writePkt(seqNumReceived%WINDOW_SIZE) == 0){
 	    			keepListening = FALSE;
 	    		}
-    		}else if(seqNumReceived > nextSeqNum && seqNumReceived < nextSeqNum + WINDOW_SIZE){
- 		   		windowPkt[nextSeqNum%WINDOW_SIZE] = pktForThisLoop;
     		}
-    		sendAck(sock);
+        	if(currentSeqnum >= 256){
+        		currentSeqnum = 0;
+        	}
     	}
     	//Not a data type packet ==> ignored
     	else{

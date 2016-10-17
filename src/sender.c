@@ -13,9 +13,15 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+/* open */
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include <sys/select.h>
 #include <sys/time.h>
+/* read */
 #include <unistd.h>
+#include <time.h>
 #include <string.h>
 
 #define FALSE 0
@@ -23,18 +29,18 @@
 
 
 int writeOnAFile = FALSE;
-FILE *fileToWrite;
+int fdToRead = -1;
 
 /* 	Method used to open a file
 		If (the file doesn't exists) -> create an empty file for writing 
 		Else (the file already exists) -> erase it and create a new empty file in place  
 	At the end of this method 
 		- writeONAFile is set to TRUE
-		- fileToWrite is set or the program is stopped
+		- fdToRead is set or the program is stopped
 	Error 10 */
 void openFile(char* fileToOpen){
 writeOnAFile = TRUE;
-	if ((fileToWrite = fopen(fileToOpen,"r"))==NULL){
+	if ((fdToRead = open(fileToOpen, O_RDONLY)) == -1){
 		fprintf(stderr, "Error receiver (10) : The file you try to use is not valid ( %s ) \n", fileToOpen);
 		exit(10);
 	}
@@ -46,6 +52,8 @@ int main (int argc, char * argv[]){
 	char* ip = NULL;
 	int port = 0;
 	char* portErrorPtr;
+
+	fdToRead = fileno(stdin);
 
 	if (argc != 3 && argc !=5 ){
 		fprintf(stderr,"Use %s [-f X] hostname port (X is the name of where the file will be sent)\n",argv[0]);
@@ -90,37 +98,53 @@ int main (int argc, char * argv[]){
     //Both last args are useless because we won't use them
     int sock = create_socket(NULL,-1 ,&addr,port);
 
-    char ttmp[MAX_PAYLOAD_SIZE];
-        fprintf(stderr, "aaa\n");
-    int size = fread(ttmp,MAX_PAYLOAD_SIZE,1,fileToWrite);
-        fprintf(stderr, "aaa\n");
-    pkt_t* pktToSend = pkt_new();
-            fprintf(stderr, "aaa\n");
-    pkt_set_type(pktToSend,PTYPE_DATA);
-            fprintf(stderr, "aaa\n");
-    pkt_set_window(pktToSend,1);
-    pkt_set_seqnum(pktToSend,0);
-            fprintf(stderr, "aaa\n");
-    pkt_set_length(pktToSend,MAX_PAYLOAD_SIZE);
-    pkt_set_payload(pktToSend,ttmp,MAX_PAYLOAD_SIZE);
-            fprintf(stderr, "aaa\n");
+    int keepListening = TRUE;
+    int num = 0;
+    while(keepListening){
+	    char ttmp[MAX_PAYLOAD_SIZE];
+	    int size = read(fdToRead,ttmp,MAX_PAYLOAD_SIZE);
+	    if(size == 0){
+	    	close(fdToRead);
+	    	break;
+	    }
+	    pkt_t* pktToSend = pkt_new();
+	    pkt_set_type(pktToSend,PTYPE_DATA);
+	    pkt_set_window(pktToSend,1);
+	    pkt_set_seqnum(pktToSend,num);
+	    pkt_set_length(pktToSend,size);
+	    pkt_set_payload(pktToSend,ttmp,size);
+		fprintf(stderr, "SEND : %d\n",num);
 
-            fprintf(stderr, "aaa\n");
-    char bufTmp[524];
-	size_t len = sizeof(bufTmp); 
-    if(pkt_encode(pktToSend,bufTmp,&len) == PKT_OK){
-    	if((write(sock,bufTmp,524)) == -1){
-            fprintf(stderr, "Error : write(1)\n");
-        }	
-		
-	}else{
-		fprintf(stderr, "Erreur sender (30) : encode\n");
-		exit(30);
-	}
-		fprintf(stderr, "SEND : %d\n",size);
-    /*while(TRUE){
+	    char bufTmp[size + 12];
+		size_t len = sizeof(bufTmp); 
+	    if(pkt_encode(pktToSend,bufTmp,&len) == PKT_OK){
+	    	if((write(sock,bufTmp,len)) == -1){
+	            fprintf(stderr, "Error : write(1)\n");
+	        }else{
+	        	num++;
+	        	if(num == 256){
+	        		num = 0;
+	        	}
+	        }
+			
+		}else{
+			fprintf(stderr, "Erreur sender (30) : encode\n");
+			exit(30);
+		}
 
-    }*/
+		 struct timespec tim, tim2;
+   tim.tv_sec = 0;
+   tim.tv_nsec = 500000;
+
+   if(nanosleep(&tim , &tim2) < 0 )   
+   {
+      printf("Nano sleep system call failed \n");
+      return -1;
+   }
+
+
+
+    }
 }
 
 // ICi y'aura sliding window 
