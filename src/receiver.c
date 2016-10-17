@@ -123,7 +123,7 @@ int writePkt(int currentPkt){
                     fprintf(stderr, "Error : write(1)\n");
 				}
 			}else{
-	            if(fwrite(windowPkt[i],pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
+	            if(fwrite(pkt_get_payload(windowPkt[i]),pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
     	            fprintf(stderr, "Error : write(2)\n");
         	    }
 			}
@@ -132,23 +132,30 @@ int writePkt(int currentPkt){
 			}
 			pkt_del(windowPkt[i]);
 			windowPkt[i] = 0;
-
+			nextSeqNum++;
 		}else{
 			return 1;
 		}
 	}
 	
 	for(i = 0;i<currentPkt;i++){
-	if(windowPkt[i]!=0){
-			if(writeOnAFile == TRUE){
-				if(write(fileno(stdout),windowPkt[i],(int) pkt_get_length(windowPkt[i])) == -1){
-                    fprintf(stderr, "Error : write(3)\n");
+		if(windowPkt[i]!=0){
+			fprintf(stderr, "length : %d\n", pkt_get_length(windowPkt[i]));
+			if(writeOnAFile == FALSE){
+				if(write(fileno(stdout),windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
+                    fprintf(stderr, "Error : write(1)\n");
 				}
 			}else{
-	            if(fwrite(windowPkt[i],pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
-    	            fprintf(stderr, "Error : write(4)\n");
+	            if(fwrite(pkt_get_payload(windowPkt[i]),pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
+    	            fprintf(stderr, "Error : write(2)\n");
         	    }
 			}
+			if(pkt_get_length(windowPkt[i])==0){
+				ret=0;
+			}
+			pkt_del(windowPkt[i]);
+			windowPkt[i] = 0;
+			nextSeqNum++;
 		}else{
 			return 1;
 		}
