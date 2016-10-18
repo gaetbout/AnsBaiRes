@@ -275,9 +275,11 @@ int main (int argc, char * argv[]){
 	    			keepListening = FALSE;
 	    		}
 	    		sendAck(sock);
-    		}else{
+    		}/*else if(seqNumReceived <= curr){
     			
-    		fprintf(stderr, "zarezaeza\n");
+    		}*/else{
+    			
+    			fprintf(stderr, "Receiver error (31) : packet outside the window \n");
     		}
         	if(currentSeqnum >= 256){
         		currentSeqnum = 0;

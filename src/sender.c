@@ -28,12 +28,15 @@
 #define TRUE 1
 
 
-int writeOnAFile = FALSE;
+int readFromFile = FALSE;
 int fdToRead = -1;
 
 int windowSize = 1;
 pkt_t *windowPkt[MAX_WINDOW_SIZE];
 int currentSeqnum = 0;
+
+int firstPkt = 0;
+int lastSeqnum=0;
 
 fd_set rfds;
 
@@ -44,11 +47,11 @@ char buffReadGen[MAX_PAYLOAD_SIZE];
 		If (the file doesn't exists) -> create an empty file for writing 
 		Else (the file already exists) -> erase it and create a new empty file in place  
 	At the end of this method 
-		- writeONAFile is set to TRUE
+		- readFromFile is set to TRUE
 		- fdToRead is set or the program is stopped
 	Error 10 */
 void openFile(char* fileToOpen){
-writeOnAFile = TRUE;
+	readFromFile = TRUE;
 	if ((fdToRead = open(fileToOpen, O_RDONLY)) == -1){
 		fprintf(stderr, "Error receiver (10) : The file you try to use is not valid ( %s ) \n", fileToOpen);
 		exit(10);
@@ -68,7 +71,8 @@ void fillWindow(){
 	    pkt_t* pktTmp = pkt_new();
 	    pkt_set_type(pktTmp,PTYPE_DATA);
 	    pkt_set_window(pktTmp,windowSize);
-	    pkt_set_seqnum(pktTmp,i);
+	    pkt_set_seqnum(pktTmp,lastSeqnum);
+	    lastSeqnum++;
 	    pkt_set_length(pktTmp,size);
 	    pkt_set_payload(pktTmp,buffReadGen,size);
 		windowPkt[i] = pktTmp;
@@ -79,7 +83,7 @@ void sendPkt(int numToSend, int sock){
 	pkt_t *pktTmp = windowPkt[numToSend%MAX_WINDOW_SIZE];
 	char bufTmp[pkt_get_length(pktTmp) + 12];
 	size_t len = sizeof(bufTmp); 
-	printf("sendPkt PAYLOAD : %s\n",pkt_get_payload(pktTmp));
+	//printf("sendPkt PAYLOAD : %s\n",pkt_get_payload(pktTmp));
 	printf("sendPkt NUM : %d\n",pkt_get_seqnum(pktTmp));
     if(pkt_encode(pktTmp,bufTmp,&len) == PKT_OK){
     	if((write(sock,bufTmp,len)) == -1){
@@ -98,7 +102,6 @@ void sendPkt(int numToSend, int sock){
 }
 
 int sendPkts(int sock){
-	printf("sendPkts\n");
 	int i;
 	// TODO Faire lorsque on sort de la size totale
 	int toStop = currentSeqnum;
@@ -113,6 +116,51 @@ int sendPkts(int sock){
 	return 1;
 }
 
+void updateWindow(int nextSeqNum){
+	int i;
+	int num = firstPkt;
+	for (i = num;i<MAX_WINDOW_SIZE;i++){
+		if(pkt_get_seqnum(windowPkt[i])<nextSeqNum){
+		fprintf(stderr, "i %d\n", i);
+			pkt_del(windowPkt[i]);
+			int size = read(fdToRead,buffReadGen,MAX_PAYLOAD_SIZE);
+		    if(size == 0){
+		    	close(fdToRead);
+		    	break;
+		    }
+		    pkt_t* pktTmp = pkt_new();
+		    pkt_set_type(pktTmp,PTYPE_DATA);
+		    pkt_set_window(pktTmp,windowSize);
+		    pkt_set_seqnum(pktTmp,lastSeqnum);
+		    lastSeqnum++;
+		    firstPkt++;
+		    pkt_set_length(pktTmp,size);
+		    pkt_set_payload(pktTmp,buffReadGen,size);
+			windowPkt[i] = pktTmp;
+		}
+	}
+	
+	for (i = 0;i<num;i++){
+		if(pkt_get_seqnum(windowPkt[i])<nextSeqNum){
+			pkt_del(windowPkt[i]);
+			int size = read(fdToRead,buffReadGen,MAX_PAYLOAD_SIZE);
+		    if(size == 0){
+		    	close(fdToRead);
+		    	break;
+		    }
+		    pkt_t* pktTmp = pkt_new();
+		    pkt_set_type(pktTmp,PTYPE_DATA);
+		    pkt_set_window(pktTmp,windowSize);
+		    pkt_set_seqnum(pktTmp,lastSeqnum);
+		    lastSeqnum++;
+		    firstPkt++;
+		    pkt_set_length(pktTmp,size);
+		    pkt_set_payload(pktTmp,buffReadGen,size);
+			windowPkt[i] = pktTmp;
+		}
+	}
+}
+
 int readForAck(int sfd){
     struct timeval tv;
     int retval;
@@ -123,7 +171,7 @@ int readForAck(int sfd){
     tv.tv_sec = 5;
     tv.tv_usec = 0;
 
-
+    FD_ZERO(&rfds);
 	FD_SET(sfd, &rfds);
     	
     retval = select(FD_SETSIZE, &rfds, NULL, NULL, &tv);
@@ -154,7 +202,9 @@ int readForAck(int sfd){
     	}else if( pkt_get_type(ack) == PTYPE_ACK){
     		windowSize = pkt_get_window(ack);
     		fprintf(stderr, "WINDOW ACK : %d\n",windowSize);
-    		//sendPkts(sfd);
+    		fprintf(stderr, "pkt_get_seqnum ACK : %d\n",pkt_get_seqnum(ack));
+    		updateWindow(pkt_get_seqnum(ack));
+    		currentSeqnum = pkt_get_seqnum(ack);
     	}
     	//Not a data type packet ==> ignored
     	else{
@@ -175,7 +225,6 @@ int main (int argc, char * argv[]){
 	int port = 0;
 	char* portErrorPtr;
 
-	fdToRead = fileno(stdin);
 
 	if (argc != 3 && argc !=5 ){
 		fprintf(stderr,"Use %s [-f X] hostname port (X is the name of where the file will be sent)\n",argv[0]);
@@ -192,7 +241,9 @@ int main (int argc, char * argv[]){
             	return -1;
 		}
 	}
-
+	if(readFromFile == FALSE){
+		fdToRead = fileno(stdin);
+	}
 	//Address Ip resolv
 	if(argv[optind]!=NULL){
         ip = argv[optind];
@@ -215,7 +266,7 @@ int main (int argc, char * argv[]){
     	fprintf(stderr, "Error receiver (12) : %s\n", error);
     	exit(12);
     }
-    printf("Récap : \n - File exists : %d\n - Filename %s\n - ip : %s\n - port :%d\nNote : The filename is set to the port if -f option isn't used.\n", writeOnAFile, argv[2],ip,port);
+    printf("Récap : \n - File exists : %d\n - Filename %s\n - ip : %s\n - port :%d\nNote : The filename is set to the port if -f option isn't used.\n", readFromFile, argv[2],ip,port);
 
     //Both last args are useless because we won't use them
     int sock = create_socket(NULL,-1 ,&addr,port);
@@ -224,11 +275,9 @@ int main (int argc, char * argv[]){
 	
 	fillWindow();
 
-    FD_ZERO(&rfds);
 
     while(keepListening){
 	    
-
     	keepListening = sendPkts(sock);
 
     	readForAck(sock);
