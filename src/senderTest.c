@@ -27,7 +27,6 @@
 #define FALSE 0
 #define TRUE 1
 
-#define DELTA_TIMEOUT 3
 
 int readFromFile = FALSE;
 int fdToRead = -1;
@@ -115,37 +114,24 @@ int sendPkts(int sock){
 		    maxSeqnum = (maxSeqnum+1)%(256);
 		    pkt_set_length(pktTmp,size);
 		    pkt_set_payload(pktTmp,buffReadGen,size);
-		    pkt_set_timestamp(pktTmp,0);
 			windowPkt[indice] = pktTmp;
 		}
 
 		char bufTmp[pkt_get_length(pktTmp) + 12];
 		size_t len = sizeof(bufTmp); 
 		//fprintf(stderr,"indice du pkt que je vais envoyer : %d\n",indice);
-		uint32_t now = (uint32_t)time(NULL);
-		uint32_t tsmpPkt = pkt_get_timestamp(pktTmp);
-		
-
-		//Not resend if timeout isn't out
-		if(tsmpPkt == 0 || ((now - tsmpPkt ) > DELTA_TIMEOUT)){
-
-			fprintf(stderr,"J'envoie le pkt : %d\n",pkt_get_seqnum(pktTmp));
-			pkt_set_timestamp(pktTmp,now);
-			if(pkt_encode(pktTmp,bufTmp,&len) == PKT_OK){
-				if((write(sock,bufTmp,len)) == -1){
-			        fprintf(stderr, "Error : write(1)\n");
-			    }
-				numPktSent++;
-			}else{
-				fprintf(stderr, "Erreur sender (30) : encode\n");
-				exit(30);
-			}
-			indice = (indice + 1) % (MAX_WINDOW_SIZE+1);
+		fprintf(stderr,"J'envoie le pkt : %d\n",pkt_get_seqnum(pktTmp));
+		if(pkt_encode(pktTmp,bufTmp,&len) == PKT_OK){
+			if((write(sock,bufTmp,len)) == -1){
+		        fprintf(stderr, "Error : write(1)\n");
+		    }
 			numPktSent++;
 		}else{
-			numPktSent++;
-			//fprintf(stderr, "TIMER Not out\n");
+			fprintf(stderr, "Erreur sender (30) : encode\n");
+			exit(30);
 		}
+		indice = (indice + 1) % (MAX_WINDOW_SIZE+1);
+		numPktSent++;
 	}
 
 	return 1;

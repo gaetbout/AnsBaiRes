@@ -250,7 +250,7 @@ int main (int argc, char * argv[]){
     	codePkt = pkt_decode(bufferPkt,lengthRead,pktForThisLoop);
 
     	if(codePkt != PKT_OK){
-    		//TODO traiter erreurs usedne à une
+    		//TODO traiter erreurs une à une
     		fprintf(stderr, "Error pkt_decode\n");
     	}else if( pkt_get_type(pktForThisLoop) == PTYPE_DATA){
     		int seqNumReceived = pkt_get_seqnum(pktForThisLoop);
