@@ -32,11 +32,11 @@ int readFromFile = FALSE;
 int fdToRead = -1;
 
 int windowSize = 1;
-pkt_t *windowPkt[MAX_WINDOW_SIZE];
-int currentSeqnum = 0;
+pkt_t *windowPkt[MAX_WINDOW_SIZE+1];
 
-int firstPkt = 0;
-int lastSeqnum=0;
+int currentSeqnum = 0;
+int maxSeqnum = 0;
+int indicePkt = 0;
 
 fd_set rfds;
 
@@ -56,107 +56,107 @@ void openFile(char* fileToOpen){
 		fprintf(stderr, "Error receiver (10) : The file you try to use is not valid ( %s ) \n", fileToOpen);
 		exit(10);
 	}
-	printf("File %s successfully opened\n",fileToOpen);
+	fprintf(stderr,"File %s successfully opened\n",fileToOpen);
 }
 
-void fillWindow(){
-	printf("fillWindow\n");
-	int i;
-	for (i =0;i<MAX_WINDOW_SIZE;i++){
-	    int size = read(fdToRead,buffReadGen,MAX_PAYLOAD_SIZE);
-	    if(size == 0){
-	    	close(fdToRead);
-	    	break;
-	    }
-	    pkt_t* pktTmp = pkt_new();
-	    pkt_set_type(pktTmp,PTYPE_DATA);
-	    pkt_set_window(pktTmp,windowSize);
-	    pkt_set_seqnum(pktTmp,lastSeqnum);
-	    lastSeqnum++;
-	    pkt_set_length(pktTmp,size);
-	    pkt_set_payload(pktTmp,buffReadGen,size);
-		windowPkt[i] = pktTmp;
-	}
-}
+void sendFirstPk(int sock){
+	int size = read(fdToRead,buffReadGen,MAX_PAYLOAD_SIZE);
+    if(size == 0){
+    	close(fdToRead);
+    	exit(0);
+    }
+    pkt_t* pktTmp = pkt_new();
+    pkt_set_type(pktTmp,PTYPE_DATA);
+    pkt_set_window(pktTmp,windowSize);
+    pkt_set_seqnum(pktTmp,currentSeqnum);
+    currentSeqnum++;
+    maxSeqnum++;
+    pkt_set_length(pktTmp,size);
+    pkt_set_payload(pktTmp,buffReadGen,size);
 
-void sendPkt(int numToSend, int sock){
-	pkt_t *pktTmp = windowPkt[numToSend%MAX_WINDOW_SIZE];
+
+
 	char bufTmp[pkt_get_length(pktTmp) + 12];
 	size_t len = sizeof(bufTmp); 
-	//printf("sendPkt PAYLOAD : %s\n",pkt_get_payload(pktTmp));
-	printf("sendPkt NUM : %d\n",pkt_get_seqnum(pktTmp));
+
     if(pkt_encode(pktTmp,bufTmp,&len) == PKT_OK){
     	if((write(sock,bufTmp,len)) == -1){
-            fprintf(stderr, "Error : write(1)\n");
+            fprintf(stderr, "Error : write(2)\n");
         }else{
         	currentSeqnum++;
-        	if(currentSeqnum == 256){
-        		currentSeqnum = 0;
-        	}
         }
 		
 	}else{
-		fprintf(stderr, "Erreur sender (30) : encode\n");
-		exit(30);
+		fprintf(stderr, "Erreur sender (5) : encode\n");
+		exit(5);
 	}
 }
 
 int sendPkts(int sock){
-	int i;
-	// TODO Faire lorsque on sort de la size totale
-	int toStop = currentSeqnum;
-	for (i = currentSeqnum; i<toStop+windowSize;i++){
-		pkt_t *pktTmp = windowPkt[i];
-		if(pktTmp != 0){
-			sendPkt(i,sock);
-		}else{
-			return 0;
+
+	int indice = indicePkt;
+
+	int numPktSent = 0;
+	while(numPktSent<windowSize){
+	 	pkt_t *pktTmp = windowPkt[indice];
+		if(pktTmp == NULL || pktTmp == 0){
+			int size = read(fdToRead,buffReadGen,MAX_PAYLOAD_SIZE);
+		    if(size == 0){
+		    	fprintf(stderr, "ZERO \n");
+		    	close(fdToRead);
+		    	return 0;
+		    }
+		    pktTmp = pkt_new();
+		    pkt_set_type(pktTmp,PTYPE_DATA);
+		    pkt_set_window(pktTmp,windowSize);
+		    fprintf(stderr, "Je gen le packet %d\n",maxSeqnum);
+		    pkt_set_seqnum(pktTmp,maxSeqnum);
+		    maxSeqnum = (maxSeqnum+1)%(256);
+		    pkt_set_length(pktTmp,size);
+		    pkt_set_payload(pktTmp,buffReadGen,size);
+			windowPkt[indice] = pktTmp;
 		}
+
+		char bufTmp[pkt_get_length(pktTmp) + 12];
+		size_t len = sizeof(bufTmp); 
+		//fprintf(stderr,"indice du pkt que je vais envoyer : %d\n",indice);
+		fprintf(stderr,"J'envoie le pkt : %d\n",pkt_get_seqnum(pktTmp));
+		if(pkt_encode(pktTmp,bufTmp,&len) == PKT_OK){
+			if((write(sock,bufTmp,len)) == -1){
+		        fprintf(stderr, "Error : write(1)\n");
+		    }
+			numPktSent++;
+		}else{
+			fprintf(stderr, "Erreur sender (30) : encode\n");
+			exit(30);
+		}
+		indice = (indice + 1) % (MAX_WINDOW_SIZE+1);
+		numPktSent++;
 	}
+
 	return 1;
 }
 
 void updateWindow(int nextSeqNum){
-	int i;
-	int num = firstPkt;
-	for (i = num;i<MAX_WINDOW_SIZE;i++){
-		if(pkt_get_seqnum(windowPkt[i])<nextSeqNum){
-		fprintf(stderr, "i %d\n", i);
-			pkt_del(windowPkt[i]);
-			int size = read(fdToRead,buffReadGen,MAX_PAYLOAD_SIZE);
-		    if(size == 0){
-		    	close(fdToRead);
-		    	break;
-		    }
-		    pkt_t* pktTmp = pkt_new();
-		    pkt_set_type(pktTmp,PTYPE_DATA);
-		    pkt_set_window(pktTmp,windowSize);
-		    pkt_set_seqnum(pktTmp,lastSeqnum);
-		    lastSeqnum++;
-		    firstPkt++;
-		    pkt_set_length(pktTmp,size);
-		    pkt_set_payload(pktTmp,buffReadGen,size);
-			windowPkt[i] = pktTmp;
-		}
-	}
-	
-	for (i = 0;i<num;i++){
-		if(pkt_get_seqnum(windowPkt[i])<nextSeqNum){
-			pkt_del(windowPkt[i]);
-			int size = read(fdToRead,buffReadGen,MAX_PAYLOAD_SIZE);
-		    if(size == 0){
-		    	close(fdToRead);
-		    	break;
-		    }
-		    pkt_t* pktTmp = pkt_new();
-		    pkt_set_type(pktTmp,PTYPE_DATA);
-		    pkt_set_window(pktTmp,windowSize);
-		    pkt_set_seqnum(pktTmp,lastSeqnum);
-		    lastSeqnum++;
-		    firstPkt++;
-		    pkt_set_length(pktTmp,size);
-		    pkt_set_payload(pktTmp,buffReadGen,size);
-			windowPkt[i] = pktTmp;
+	while(1){
+		//Check if there a pkt
+		if(windowPkt[indicePkt] != NULL && windowPkt[indicePkt]!= 0){
+			pkt_t *pktTmp = windowPkt[indicePkt];
+			if(pkt_get_seqnum(pktTmp) == nextSeqNum){
+				return;
+			}else if(pkt_get_seqnum(pktTmp) < nextSeqNum){
+				fprintf(stderr, "Je delete le packet : %d\n",pkt_get_seqnum(pktTmp));
+				pkt_del(pktTmp);
+				windowPkt[indicePkt] = 0;
+			}else if(nextSeqNum >=0 && nextSeqNum <=31 && pkt_get_seqnum(pktTmp) >=255-32){
+				fprintf(stderr, "Je delete le packet : %d\n",pkt_get_seqnum(pktTmp));
+				pkt_del(pktTmp);
+				windowPkt[indicePkt] = 0;
+			}
+			indicePkt = (indicePkt+1) % (MAX_WINDOW_SIZE+1);
+
+		}else{
+			return;
 		}
 	}
 }
@@ -165,7 +165,6 @@ int readForAck(int sfd){
     struct timeval tv;
     int retval;
     ssize_t rec=0;
-	socklen_t lengthSock = sizeof(sfd);
 
     /* Pendant 5 secondes maxi */
     tv.tv_sec = 5;
@@ -183,17 +182,18 @@ int readForAck(int sfd){
     }
     else if (retval) {
 		char bufferAck[12];
-        rec = recvfrom(sfd, bufferAck, sizeof(bufferAck), 
-				   0, (struct sockaddr *)&sfd, &lengthSock);
-
+		rec = read(sfd,bufferAck,sizeof(bufferAck));
 	    if(rec ==-1){
     		fprintf(stderr,"Error receiver (21) : Connection failed\n");
     		exit(21);
 	    }
+	    if(rec== 0){
+	    	fprintf(stderr, "REC == 0\n");
+	    	return 0;
+	    }
 
     	pkt_t *ack = pkt_new();
     	pkt_status_code codePkt = pkt_decode(bufferAck,rec,ack);
-
 
 		if(codePkt != PKT_OK){
     		//TODO traiter erreurs une à une
@@ -201,10 +201,11 @@ int readForAck(int sfd){
     		exit(22);
     	}else if( pkt_get_type(ack) == PTYPE_ACK){
     		windowSize = pkt_get_window(ack);
-    		fprintf(stderr, "WINDOW ACK : %d\n",windowSize);
+    		//fprintf(stderr, "WINDOW ACK : %d\n",windowSize);
     		fprintf(stderr, "pkt_get_seqnum ACK : %d\n",pkt_get_seqnum(ack));
-    		updateWindow(pkt_get_seqnum(ack));
+    		//Delete useless pkt
     		currentSeqnum = pkt_get_seqnum(ack);
+    		updateWindow(pkt_get_seqnum(ack));
     	}
     	//Not a data type packet ==> ignored
     	else{
@@ -252,7 +253,7 @@ int main (int argc, char * argv[]){
     if(argv[optind+1]!=NULL){
         port = (int) strtod(argv[optind+1],&portErrorPtr);
         if(*portErrorPtr != 0){
-        	fprintf(stderr,"Error receiver (11) : The port used seems not to be an int - %s\n",argv[optind+1]);
+        	fprintf(stderr,"Error sender (11) : The port used seems not to be an int - %s\n",argv[optind+1]);
         	exit (11);
         }
     }
@@ -266,21 +267,32 @@ int main (int argc, char * argv[]){
     	fprintf(stderr, "Error receiver (12) : %s\n", error);
     	exit(12);
     }
-    printf("Récap : \n - File exists : %d\n - Filename %s\n - ip : %s\n - port :%d\nNote : The filename is set to the port if -f option isn't used.\n", readFromFile, argv[2],ip,port);
+    //printf("Récap : \n - File exists : %d\n - Filename %s\n - ip : %s\n - port :%d\nNote : The filename is set to the port if -f option isn't used.\n", readFromFile, argv[2],ip,port);
 
     //Both last args are useless because we won't use them
     int sock = create_socket(NULL,-1 ,&addr,port);
 
     int keepListening = TRUE;
-	
-	fillWindow();
 
+    sendFirstPk(sock);
+
+    readForAck(sock);
 
     while(keepListening){
 	    
     	keepListening = sendPkts(sock);
-
+    	if(keepListening == 0){
+    		//envoyer un packet vide
+    		while(readForAck(sock)){}
+    		fprintf(stderr, "FIN \n");
+    		exit(0); 
+    	}
     	readForAck(sock);
 
     }
+
+    //Envoyer un pkt vide
+
 }
+
+//	    fprintf(stderr,"Timestamp: %d\n",(int)time(NULL));

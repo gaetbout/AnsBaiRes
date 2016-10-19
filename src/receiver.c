@@ -13,10 +13,16 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+
+/* open */
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include <sys/select.h>
 #include <sys/time.h>
 #include <unistd.h>
 #include <string.h>
+#include <time.h>
 
 #define FALSE 0
 #define TRUE 1
@@ -24,11 +30,13 @@
 #define WINDOW_SIZE 8
 
 int writeOnAFile = FALSE;
-FILE *fileToWrite;
+int fdToWrite = 0;
+
+int currentPktGlob=0;
+int currentSeqnum = -1;
 
 // The socket to listen
 int sock;
-int currentSeqnum = -1;
 fd_set rfds;
 
 // Buffers for the packet and create ack
@@ -51,16 +59,16 @@ pkt_status_code codePkt;
 	Error 10 */
 void openFile(char* fileToOpen){
 	writeOnAFile = TRUE;
-	if ((fileToWrite = fopen(fileToOpen,"w"))==NULL){
+	mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+	if ((fdToWrite = open(fileToOpen, O_WRONLY | O_CREAT | O_TRUNC, mode)) == -1){
 		fprintf(stderr, "Error receiver (10) : The file you try to use is not valid ( %s ) \n", fileToOpen);
 		exit(10);
 	}
-	printf("File %s successfully opened\n",fileToOpen);
+	fprintf(stderr,"File %s successfully opened\n",fileToOpen);
 }
 
 /* Method used to fill the window of pkt with new empty pkt */
 void fillWindow(){
-	printf("fillWindow\n");
 	int i;
 	for (i =0;i<WINDOW_SIZE;i++){
 		windowPkt[i] = 0;
@@ -96,7 +104,6 @@ ssize_t readPkt(const int sfd){
 				   0, (struct sockaddr *)&from, &taille);
 
 
-//TODO Faire que une seule fwa
         if (connect(sfd, (struct sockaddr *) &from, 
                 sizeof(struct sockaddr_in6)) != 0){
     		fprintf(stderr, "Error receiver (23) : connect\n");
@@ -111,7 +118,7 @@ ssize_t readPkt(const int sfd){
     else{
         fprintf(stderr, "No data for 5 seconds\n");
         if(writeOnAFile == TRUE){
-    		fclose(fileToWrite);
+    		close(fdToWrite);
     	}
         exit(0);
     }
@@ -120,16 +127,15 @@ ssize_t readPkt(const int sfd){
 } 
 
 void sendAck(const int sfd){
-	fprintf(stderr, "ACK SENT %d\n", currentSeqnum);
 	pkt_t *ack = pkt_new();
 	pkt_set_type(ack,PTYPE_ACK);
 	pkt_set_window(ack,WINDOW_SIZE);
-	pkt_set_seqnum(ack,(currentSeqnum)%WINDOW_SIZE);
+	pkt_set_seqnum(ack,currentSeqnum);
 	pkt_set_length(ack,0);
 	char bufTmp[12];
 	size_t len = sizeof(bufTmp); 
 	if(pkt_encode(ack,bufTmp,&len) == PKT_OK){
-		fprintf(stderr, "ACK : %d\n",(currentSeqnum)%WINDOW_SIZE);
+		fprintf(stderr, "ACK : %d\n",(currentSeqnum));
 		if((write(sfd,bufTmp,len)) == -1){
             fprintf(stderr, "Error : write(5)\n");
        	}
@@ -143,57 +149,40 @@ void sendAck(const int sfd){
 
 /* Method used to write pkts, write every valid pkt 
 	Return 0 if the length of pkt == 0 (Last pkt) */
-int writePkt(int currentPkt){
-	int i;
+int writePkt(){
 	int ret=1;
-	for(i = currentPkt;i<WINDOW_SIZE;i++){
+	int numToStart=0;
+	int i;
+	for (i = 0;i<WINDOW_SIZE;i++){
+		if(windowPkt[i] != 0 && currentSeqnum ==pkt_get_seqnum(windowPkt[i])){
+			numToStart=i;
+			break;
+		}
+	}
 
-		if(windowPkt[i]!=0){
-			fprintf(stderr, "B1 currentPkt : %d\n",i);
-			if(writeOnAFile == FALSE){
-				if(write(fileno(stdout),windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
-                    fprintf(stderr, "Error : write(1)\n");
-				}
-			}else{
-	            if(fwrite(pkt_get_payload(windowPkt[i]),pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
-    	            fprintf(stderr, "Error : write(2)\n");
-        	    }
-			}
-			if(pkt_get_length(windowPkt[i])==0){
-				ret=0;
-			}
-    		currentSeqnum++;
-    		//sendAck(sock);
-			pkt_del(windowPkt[i]);
-			windowPkt[i] = 0;
-		}else{
-			return 1;
+	while(1){
+		// Test pck existe
+		if(windowPkt[numToStart] == 0 ){
+       	 	//fprintf(stderr, "No more pkt to write\n");
+       	 	return ret;	
 		}
-	}
-	
-	for(i = 0;i<currentPkt;i++){
-		if(windowPkt[i]!=0){
-			fprintf(stderr, "B2 currentPkt : %d\n",i);
-			if(writeOnAFile == FALSE){
-				if(write(fileno(stdout),windowPkt[i],pkt_get_length(windowPkt[i])) == -1){
-                    fprintf(stderr, "Error : write(1)\n");
-				}
-			}else{
-	            if(fwrite(pkt_get_payload(windowPkt[i]),pkt_get_length(windowPkt[i]),1,fileToWrite) == 0){
-    	            fprintf(stderr, "Error : write(2)\n");
-        	    }
-			}
-			if(pkt_get_length(windowPkt[i])==0){
-				ret=0;
-			}
-    		currentSeqnum++;
-    		//sendAck(sock);
-			pkt_del(windowPkt[i]);
-			windowPkt[i] = 0;
-		}else{
-			return 1;
+		pkt_t *currPkt = windowPkt[numToStart];
+		if(pkt_get_seqnum(currPkt) != currentSeqnum){
+			return ret;
 		}
-	}
+		//Tu write le paquet
+		if(write(fdToWrite,pkt_get_payload(currPkt),pkt_get_length(currPkt)) == -1){
+        	fprintf(stderr, "Error : write(1)\n");
+		}
+		fprintf(stderr, "J'écris %d\n",pkt_get_seqnum(currPkt));
+		ret = pkt_get_length(currPkt);
+		windowPkt[numToStart] = 0;
+		//currentPkt = (numToStart+1)%WINDOW_SIZE;
+		currentSeqnum = (pkt_get_seqnum(currPkt)+1)%256;
+		pkt_del(currPkt);
+		currentPktGlob = (currentPktGlob+1)%WINDOW_SIZE;
+		numToStart =  (numToStart+1)%WINDOW_SIZE;
+	}	
 	return ret;
 }
 
@@ -233,7 +222,9 @@ int main (int argc, char * argv[]){
         }
     }
 
-
+    if(writeOnAFile == FALSE){
+    	fdToWrite = fileno(stdin);
+    }
 	struct sockaddr_in6 addr;
 	const char* error = NULL;
 	//Real address treatment
@@ -242,7 +233,7 @@ int main (int argc, char * argv[]){
     	fprintf(stderr, "Error receiver (12) : %s\n", error);
     	exit(12);
     }
-    printf("Récap : \n - File exists : %d\n - Filename %s\n - ip : %s\n - port :%d\nNote : The filename is set to the port if -f option isn't used.\n", writeOnAFile, argv[2],ip,port);
+    //printf("Récap : \n - File exists : %d\n - Filename %s\n - ip : %s\n - port :%d\nNote : The filename is set to the port if -f option isn't used.\n", writeOnAFile, argv[2],ip,port);
 
     //Both last args are useless because we won't use them
     sock = create_socket(&addr,port,NULL,-1);
@@ -266,24 +257,22 @@ int main (int argc, char * argv[]){
     		if(currentSeqnum==-1){
     			currentSeqnum = seqNumReceived; 
     		}
-			//fprintf(stderr, "currentSeqnum %d\n", currentSeqnum);
-			//fprintf(stderr, "seqNumReceived %d\n", seqNumReceived);
-    		if(currentSeqnum == seqNumReceived){
-    			//fprintf(stderr, "seqNumReceived - WINDOW_SIZE %d\n", seqNumReceived%WINDOW_SIZE);
-            	windowPkt[seqNumReceived%WINDOW_SIZE] = pktForThisLoop;
-    			if(writePkt(seqNumReceived%WINDOW_SIZE) == 0){
+			
+			fprintf(stderr, "Je reçois : %d\n", seqNumReceived);
+			if(currentSeqnum == seqNumReceived){
+				fprintf(stderr, "Et en plus je vais écrire !\n");
+    			windowPkt[currentPktGlob] = pktForThisLoop;
+    			if(writePkt() == 0){
 	    			keepListening = FALSE;
 	    		}
 	    		sendAck(sock);
-    		}/*else if(seqNumReceived <= curr){
-    			
-    		}*/else{
+    		}else if(seqNumReceived <= currentSeqnum+WINDOW_SIZE){
+    			windowPkt[currentPktGlob+(seqNumReceived- currentSeqnum)%WINDOW_SIZE] = pktForThisLoop;
+    		}else{
     			
     			fprintf(stderr, "Receiver error (31) : packet outside the window \n");
     		}
-        	if(currentSeqnum >= 256){
-        		currentSeqnum = 0;
-        	}
+    		currentSeqnum = currentSeqnum%256;
     	}
     	//Not a data type packet ==> ignored
     	else{
@@ -294,7 +283,7 @@ int main (int argc, char * argv[]){
     fprintf(stderr, "END OF FILE \n");
 
     if(writeOnAFile == TRUE){
-    	fclose(fileToWrite);
+    	close(fdToWrite);
     }
     return 0;
 }
