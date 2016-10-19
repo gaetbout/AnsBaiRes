@@ -215,7 +215,7 @@ int readForAck(int sfd){
     		exit(22);
     	}else if( pkt_get_type(ack) == PTYPE_ACK){
     		windowSize = pkt_get_window(ack);
-    		//fprintf(stderr, "WINDOW ACK : %d\n",windowSize);
+    		fprintf(stderr, "WINDOW ACK : %d\n",windowSize);
     		fprintf(stderr, "pkt_get_seqnum ACK : %d\n",pkt_get_seqnum(ack));
     		//Delete useless pkt
     		currentSeqnum = pkt_get_seqnum(ack);

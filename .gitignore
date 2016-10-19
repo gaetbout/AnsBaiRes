@@ -1,4 +1,5 @@
 git rm --cached sender
 git rm --cached receiver
 git rm --cached *.pdf
+git rm --cached *.o
 

@@ -45,6 +45,7 @@ char bufferAck[12];
 
 // Window for packets
 pkt_t *windowPkt[WINDOW_SIZE];
+int size =0;
 
 // Status code used on ultiple places
 pkt_status_code codePkt;
@@ -129,7 +130,7 @@ ssize_t readPkt(const int sfd){
 void sendAck(const int sfd){
 	pkt_t *ack = pkt_new();
 	pkt_set_type(ack,PTYPE_ACK);
-	pkt_set_window(ack,WINDOW_SIZE);
+	pkt_set_window(ack,WINDOW_SIZE-size);
 	pkt_set_seqnum(ack,currentSeqnum);
 	pkt_set_length(ack,0);
 	char bufTmp[12];
@@ -174,6 +175,7 @@ int writePkt(){
 		if(write(fdToWrite,pkt_get_payload(currPkt),pkt_get_length(currPkt)) == -1){
         	fprintf(stderr, "Error : write(1)\n");
 		}
+		size--;
 		fprintf(stderr, "J'écris %d\n",pkt_get_seqnum(currPkt));
 		ret = pkt_get_length(currPkt);
 		windowPkt[numToStart] = 0;
@@ -265,8 +267,10 @@ int main (int argc, char * argv[]){
     			if(writePkt() == 0){
 	    			keepListening = FALSE;
 	    		}
+	    		size++;
 	    		sendAck(sock);
     		}else if(seqNumReceived <= currentSeqnum+WINDOW_SIZE){
+    			size++;
     			windowPkt[currentPktGlob+(seqNumReceived- currentSeqnum)%WINDOW_SIZE] = pktForThisLoop;
     		}else{
     			
