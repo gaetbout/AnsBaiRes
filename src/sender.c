@@ -243,9 +243,10 @@ int readForAck(int sfd){
     		currentSeqnum = pkt_get_seqnum(ack);
     		updateWindow(pkt_get_seqnum(ack));
 
-    		//Traitment when window equals zero
+    		//Treatment when window equals zero
+    		// We reopen the window only if we got an ack that told us to 
     		if(windowSize == 0){
-
+    			readForAck(sfd);
     		}
     	}
     	//Not a ack type packet ==> ignored
