@@ -79,7 +79,7 @@
 		}
 
 		//Check if there is a payload
-		if(len == 12 && type == PTYPE_DATA){
+		if(len < 12 && type == PTYPE_DATA){
 			return E_UNCONSISTENT;
 		}
 		

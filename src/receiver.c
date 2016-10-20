@@ -257,6 +257,15 @@ int main (int argc, char * argv[]){
     	}else if( pkt_get_type(pktForThisLoop) == PTYPE_DATA){
     		int seqNumReceived = pkt_get_seqnum(pktForThisLoop);
     		if(currentSeqnum==-1){
+    			//Test if the first segment equals 0
+    			// if not stops the program
+    			if(seqNumReceived != 0){
+    				fprintf(stderr, "Wrong first seqnum : %d in place of 0\n",seqNumReceived);
+	    			if(writeOnAFile == TRUE){
+	    				close(fdToWrite);
+	    				exit(0);
+	    			}
+    			}
     			currentSeqnum = seqNumReceived; 
     		}
 			

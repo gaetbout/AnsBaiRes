@@ -39,6 +39,8 @@ int currentSeqnum = 0;
 int maxSeqnum = 0;
 int indicePkt = 0;
 
+int lastPacketGenerated = FALSE;
+
 fd_set rfds;
 
 char buffReadGen[MAX_PAYLOAD_SIZE];
@@ -102,10 +104,10 @@ int sendPkts(int sock){
 	 	pkt_t *pktTmp = windowPkt[indice];
 		if(pktTmp == NULL || pktTmp == 0){
 			int size = read(fdToRead,buffReadGen,MAX_PAYLOAD_SIZE);
-		    if(size == 0){
+		    if(size == 0 && lastPacketGenerated == FALSE){
 		    	fprintf(stderr, "ZERO \n");
+		    	lastPacketGenerated = TRUE;
 		    	close(fdToRead);
-		    	return 0;
 		    }
 		    pktTmp = pkt_new();
 		    pkt_set_type(pktTmp,PTYPE_DATA);
@@ -113,10 +115,16 @@ int sendPkts(int sock){
 		    fprintf(stderr, "Je gen le packet %d\n",maxSeqnum);
 		    pkt_set_seqnum(pktTmp,maxSeqnum);
 		    maxSeqnum = (maxSeqnum+1)%(256);
-		    pkt_set_length(pktTmp,size);
-		    pkt_set_payload(pktTmp,buffReadGen,size);
+		    if(lastPacketGenerated == FALSE){
+		    	pkt_set_length(pktTmp,size);
+			    pkt_set_payload(pktTmp,buffReadGen,size);
+		    }else{
+		    	fprintf(stderr, "JE gen un pkt vide \n");
+		    	pkt_set_length(pktTmp,0);
+		    }
 		    pkt_set_timestamp(pktTmp,0);
 			windowPkt[indice] = pktTmp;
+
 		}
 
 		char bufTmp[pkt_get_length(pktTmp) + 12];
@@ -145,6 +153,10 @@ int sendPkts(int sock){
 		}else{
 			numPktSent++;
 			//fprintf(stderr, "TIMER Not out\n");
+		}
+		if(lastPacketGenerated == TRUE){
+			return 0;
+
 		}
 	}
 
@@ -175,21 +187,27 @@ void updateWindow(int nextSeqNum){
 	}
 }
 
+/*int windowEqualsZero(int sfd){
+	int ret = 1;
+
+	return ret;
+}*/
+
 int readForAck(int sfd){
     struct timeval tv;
     int retval;
     ssize_t rec=0;
 
     /* Pendant 5 secondes maxi */
-    tv.tv_sec = 5;
-    tv.tv_usec = 0;
+    tv.tv_sec = 0;
+    tv.tv_usec = 1;
 
     FD_ZERO(&rfds);
 	FD_SET(sfd, &rfds);
-    	
-    retval = select(FD_SETSIZE, &rfds, NULL, NULL, &tv);
-	/* Considérer tv comme indéfini maintenant ! */
 
+    //Le timeout petit permet de vider le buffer d'ack
+    retval = select(FD_SETSIZE, &rfds, NULL, NULL, &tv);
+    fprintf(stderr, "ON READ REREAD \n");
 
     if (retval == -1){
         fprintf(stderr, "Error receiver (20): select\n");
@@ -220,14 +238,20 @@ int readForAck(int sfd){
     		//Delete useless pkt
     		currentSeqnum = pkt_get_seqnum(ack);
     		updateWindow(pkt_get_seqnum(ack));
+
+    		//Traitment when window equals zero
+    		if(windowSize == 0){
+
+    		}
     	}
-    	//Not a data type packet ==> ignored
+    	//Not a ack type packet ==> ignored
     	else{
 
     	}
 
     }
     else{
+    	fprintf(stderr, "ON READ TIMEOUT \n");
         //sendPkt(currentSeqnum,sfd);
     }
 
@@ -297,7 +321,9 @@ int main (int argc, char * argv[]){
     	keepListening = sendPkts(sock);
     	if(keepListening == 0){
     		//envoyer un packet vide
-    		while(readForAck(sock)){}
+    		while(readForAck(sock)){
+    			sendPkts(sock);
+    		}
     		fprintf(stderr, "FIN \n");
     		exit(0); 
     	}
