@@ -27,7 +27,7 @@
 #define FALSE 0
 #define TRUE 1
 
-#define DELTA_TIMEOUT 3
+#define DELTA_TIMEOUT 200000 // 200 millisecodnes
 
 int readFromFile = FALSE;
 int fdToRead = -1;
@@ -130,7 +130,10 @@ int sendPkts(int sock){
 		char bufTmp[pkt_get_length(pktTmp) + 12];
 		size_t len = sizeof(bufTmp); 
 		//fprintf(stderr,"indice du pkt que je vais envoyer : %d\n",indice);
-		uint32_t now = (uint32_t)time(NULL);
+		struct timeval tv;
+    	gettimeofday(&tv, NULL);
+
+    	uint32_t now = tv.tv_sec * 1000 + tv.tv_usec / 1000;
 		uint32_t tsmpPkt = pkt_get_timestamp(pktTmp);
 		
 
@@ -151,6 +154,7 @@ int sendPkts(int sock){
 			indice = (indice + 1) % (MAX_WINDOW_SIZE+1);
 			numPktSent++;
 		}else{
+			fprintf(stderr, "JE RENVOI PAS\n");
 			numPktSent++;
 			//fprintf(stderr, "TIMER Not out\n");
 		}

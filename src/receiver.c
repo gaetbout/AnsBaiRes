@@ -34,6 +34,7 @@ int fdToWrite = 0;
 
 int currentPktGlob=0;
 int currentSeqnum = -1;
+uint32_t lastTmstp = -1;
 
 // The socket to listen
 int sock;
@@ -133,6 +134,7 @@ void sendAck(const int sfd){
 	pkt_set_window(ack,WINDOW_SIZE-size);
 	pkt_set_seqnum(ack,currentSeqnum);
 	pkt_set_length(ack,0);
+	pkt_set_timestamp(ack,lastTmstp);
 	char bufTmp[12];
 	size_t len = sizeof(bufTmp); 
 	if(pkt_encode(ack,bufTmp,&len) == PKT_OK){
@@ -281,6 +283,7 @@ int main (int argc, char * argv[]){
     		}else if(seqNumReceived <= currentSeqnum+WINDOW_SIZE){
     			size++;
     			windowPkt[currentPktGlob+(seqNumReceived- currentSeqnum)%WINDOW_SIZE] = pktForThisLoop;
+    			lastTmstp = pkt_get_timestamp(pktForThisLoop);
     		}else{
     			
     			fprintf(stderr, "Receiver error (31) : packet outside the window \n");
