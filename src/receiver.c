@@ -40,9 +40,8 @@ uint32_t lastTmstp = -1;
 int sock;
 fd_set rfds;
 
-// Buffers for the packet and create ack
+// Buffers for the packet
 char bufferPkt[MAX_PAYLOAD_SIZE+12];
-char bufferAck[12];
 
 // Window for packets
 pkt_t *windowPkt[WINDOW_SIZE];
@@ -256,6 +255,7 @@ int main (int argc, char * argv[]){
     	if(codePkt != PKT_OK){
     		//TODO traiter erreurs usedne à une
     		fprintf(stderr, "Error pkt_decode\n");
+    		sendAck(sock);
     	}else if( pkt_get_type(pktForThisLoop) == PTYPE_DATA){
     		int seqNumReceived = pkt_get_seqnum(pktForThisLoop);
     		if(currentSeqnum==-1){
@@ -285,14 +285,14 @@ int main (int argc, char * argv[]){
     			windowPkt[currentPktGlob+(seqNumReceived- currentSeqnum)%WINDOW_SIZE] = pktForThisLoop;
     			lastTmstp = pkt_get_timestamp(pktForThisLoop);
     		}else{
-    			
+    			sendAck(sock);
     			fprintf(stderr, "Receiver error (31) : packet outside the window \n");
     		}
     		currentSeqnum = currentSeqnum%256;
     	}
     	//Not a data type packet ==> ignored
     	else{
-
+	    		sendAck(sock);
     	}
     }
 

@@ -62,39 +62,11 @@ void openFile(char* fileToOpen){
 	fprintf(stderr,"File %s successfully opened\n",fileToOpen);
 }
 
-void sendFirstPk(int sock){
-	int size = read(fdToRead,buffReadGen,MAX_PAYLOAD_SIZE);
-    if(size == 0){
-    	close(fdToRead);
-    	exit(0);
-    }
-    pkt_t* pktTmp = pkt_new();
-    pkt_set_type(pktTmp,PTYPE_DATA);
-    pkt_set_window(pktTmp,windowSize);
-    pkt_set_seqnum(pktTmp,currentSeqnum);
-    currentSeqnum++;
-    maxSeqnum++;
-    pkt_set_length(pktTmp,size);
-    pkt_set_payload(pktTmp,buffReadGen,size);
 
-
-
-	char bufTmp[pkt_get_length(pktTmp) + 12];
-	size_t len = sizeof(bufTmp); 
-
-    if(pkt_encode(pktTmp,bufTmp,&len) == PKT_OK){
-    	if((write(sock,bufTmp,len)) == -1){
-            fprintf(stderr, "Error : write(2)\n");
-        }else{
-        	currentSeqnum++;
-        }
-		
-	}else{
-		fprintf(stderr, "Erreur sender (5) : encode\n");
-		exit(5);
-	}
-}
-
+/* Used to send every packets 
+	if tab[x] is null read adn create a packet
+	
+	*/
 int sendPkts(int sock){
 
 	int indice = indicePkt;
@@ -119,7 +91,7 @@ int sendPkts(int sock){
 		    	pkt_set_length(pktTmp,size);
 			    pkt_set_payload(pktTmp,buffReadGen,size);
 		    }else{
-		    	fprintf(stderr, "JE gen un pkt vide \n");
+		    	fprintf(stderr, "Je gen un pkt vide \n");
 		    	pkt_set_length(pktTmp,0);
 		    }
 		    pkt_set_timestamp(pktTmp,0);
@@ -133,11 +105,14 @@ int sendPkts(int sock){
 		struct timeval tv;
     	gettimeofday(&tv, NULL);
 
-    	uint32_t now = tv.tv_sec * 1000 + tv.tv_usec / 1000;
+    	uint32_t now = tv.tv_sec % 1000 + tv.tv_usec;
 		uint32_t tsmpPkt = pkt_get_timestamp(pktTmp);
 		
 
 		//Not resend if timeout isn't out
+		//fprintf(stderr,"now: %d\n",now);
+		//fprintf(stderr,"tsmpPkt: %d\n",tsmpPkt);
+		//fprintf(stderr,"DELTA_TIMEOUT: %d\n",DELTA_TIMEOUT);
 		if(tsmpPkt == 0 || ((now - tsmpPkt ) > DELTA_TIMEOUT)){
 
 			fprintf(stderr,"J'envoie le pkt : %d\n",pkt_get_seqnum(pktTmp));
@@ -154,7 +129,7 @@ int sendPkts(int sock){
 			indice = (indice + 1) % (MAX_WINDOW_SIZE+1);
 			numPktSent++;
 		}else{
-			fprintf(stderr, "JE RENVOI PAS\n");
+			//fprintf(stderr, "JE RENVOI PAS\n");
 			numPktSent++;
 			//fprintf(stderr, "TIMER Not out\n");
 		}
@@ -211,7 +186,7 @@ int readForAck(int sfd){
 
     //Le timeout petit permet de vider le buffer d'ack
     retval = select(FD_SETSIZE, &rfds, NULL, NULL, &tv);
-    fprintf(stderr, "ON READ REREAD \n");
+    //fprintf(stderr, "ON READ REREAD \n");
 
     if (retval == -1){
         fprintf(stderr, "Error receiver (20): select\n");
@@ -234,10 +209,10 @@ int readForAck(int sfd){
 		if(codePkt != PKT_OK){
     		//TODO traiter erreurs une à une
     		fprintf(stderr, "Error receiver (22) : decode failed\n");
-    		exit(22);
+    		//exit(22);
     	}else if( pkt_get_type(ack) == PTYPE_ACK){
     		windowSize = pkt_get_window(ack);
-    		fprintf(stderr, "WINDOW ACK : %d\n",windowSize);
+    		//fprintf(stderr, "WINDOW ACK : %d\n",windowSize);
     		fprintf(stderr, "pkt_get_seqnum ACK : %d\n",pkt_get_seqnum(ack));
     		//Delete useless pkt
     		currentSeqnum = pkt_get_seqnum(ack);
@@ -251,13 +226,14 @@ int readForAck(int sfd){
     	}
     	//Not a ack type packet ==> ignored
     	else{
+    		//Todo faire un taux de corruption ???
 
     	}
 
     }
     else{
-    	fprintf(stderr, "ON READ TIMEOUT \n");
-        //sendPkt(currentSeqnum,sfd);
+    	//fprintf(stderr, "ON READ TIMEOUT \n");
+        sendPkts(sfd);
     }
 
     return rec;
@@ -316,10 +292,6 @@ int main (int argc, char * argv[]){
     int sock = create_socket(NULL,-1 ,&addr,port);
 
     int keepListening = TRUE;
-
-    sendFirstPk(sock);
-
-    readForAck(sock);
 
     while(keepListening){
 	    
