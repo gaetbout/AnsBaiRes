@@ -27,7 +27,7 @@
 #define FALSE 0
 #define TRUE 1
 
-#define DELTA_TIMEOUT 200000 // 200 millisecodnes
+#define DELTA_TIMEOUT 3700000 // 3,7 secondes
 
 int readFromFile = FALSE;
 int fdToRead = -1;

@@ -117,7 +117,7 @@ ssize_t readPkt(const int sfd){
 	    }
     }
     else{
-        fprintf(stderr, "No data for 5 seconds\n");
+        fprintf(stderr, "No data for 10 seconds\n");
         if(writeOnAFile == TRUE){
     		close(fdToWrite);
     	}
@@ -292,7 +292,7 @@ int main (int argc, char * argv[]){
     	}
     	//Not a data type packet ==> ignored
     	else{
-	    		sendAck(sock);
+    		sendAck(sock);
     	}
     }
 
