@@ -26,6 +26,7 @@ const char * real_address(const char * address, struct sockaddr_in6 * rval){
     memset(&hints, 0, sizeof(struct addrinfo));
  	hints.ai_family = AF_INET6;
  	hints.ai_socktype = SOCK_DGRAM;
+ 	hints.ai_flags = AI_PASSIVE;
 
     s = getaddrinfo(address, NULL, &hints, &result);
     if (s != 0) {
