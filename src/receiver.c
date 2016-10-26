@@ -34,7 +34,7 @@ int fdToWrite = 0;
 
 int currentPktGlob=0;
 int currentSeqnum = -1;
-uint32_t lastTmstp = -1;
+uint32_t lastTmstp = 0;
 
 // The socket to listen
 int sock;
@@ -89,7 +89,7 @@ ssize_t readPkt(const int sfd){
 	socklen_t taille = sizeof(from);
 
     /* Pendant 5 secondes maxi */
-    tv.tv_sec = 5;
+    tv.tv_sec = 10;
     tv.tv_usec = 0;
 
 	FD_SET(sfd, &rfds);
@@ -117,7 +117,7 @@ ssize_t readPkt(const int sfd){
 	    }
     }
     else{
-        fprintf(stderr, "No data for 10 seconds\n");
+        fprintf(stderr, "No data for 30 seconds\n");
         if(writeOnAFile == TRUE){
     		close(fdToWrite);
     	}
@@ -271,6 +271,8 @@ int main (int argc, char * argv[]){
     			currentSeqnum = seqNumReceived; 
     		}
 			
+			lastTmstp = pkt_get_timestamp(pktForThisLoop);
+			//fprintf(stderr,"TMSssP %u\n",pkt_get_timestamp(pktForThisLoop)); 
 			fprintf(stderr, "Je reçois : %d\n", seqNumReceived);
 			if(currentSeqnum == seqNumReceived){
 				fprintf(stderr, "Et en plus je vais écrire !\n");
@@ -278,12 +280,12 @@ int main (int argc, char * argv[]){
     			if(writePkt() == 0){
 	    			keepListening = FALSE;
 	    		}
+
 	    		size++;
 	    		sendAck(sock);
     		}else if(seqNumReceived <= currentSeqnum+WINDOW_SIZE){
     			size++;
     			windowPkt[currentPktGlob+(seqNumReceived- currentSeqnum)%WINDOW_SIZE] = pktForThisLoop;
-    			lastTmstp = pkt_get_timestamp(pktForThisLoop);
     		}else{
     			sendAck(sock);
     			fprintf(stderr, "Receiver error (31) : packet outside the window \n");
