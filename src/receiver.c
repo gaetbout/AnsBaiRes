@@ -117,7 +117,11 @@ ssize_t readPkt(const int sfd){
 	    }
     }
     else{
+<<<<<<< HEAD
         fprintf(stderr, "No data for 30 seconds end of program\n");
+=======
+        fprintf(stderr, "No data for 30 seconds\n");
+>>>>>>> f4d0a765b106b7469430ccd9ab9b6d92323f96a3
         if(writeOnAFile == TRUE){
     		close(fdToWrite);
     	}
@@ -270,10 +274,17 @@ int main (int argc, char * argv[]){
     			}
     			currentSeqnum = seqNumReceived;
     		}
+<<<<<<< HEAD
 
 			lastTmstp = pkt_get_timestamp(pktForThisLoop);
 			//fprintf(stderr,"TMSssP %u\n",pkt_get_timestamp(pktForThisLoop));
 			//fprintf(stderr, "Je reçois : %d\n", seqNumReceived);
+=======
+			
+			lastTmstp = pkt_get_timestamp(pktForThisLoop);
+			//fprintf(stderr,"TMSssP %u\n",pkt_get_timestamp(pktForThisLoop)); 
+			fprintf(stderr, "Je reçois : %d\n", seqNumReceived);
+>>>>>>> f4d0a765b106b7469430ccd9ab9b6d92323f96a3
 			if(currentSeqnum == seqNumReceived){
 				//fprintf(stderr, "Et en plus je vais écrire !\n");
     			windowPkt[currentPktGlob] = pktForThisLoop;
