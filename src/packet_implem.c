@@ -36,6 +36,9 @@
 	void pkt_del(pkt_t *pkt)
 	{
 		//if the ptr is NULL no operation is performed -> no need to test it (see man)
+		if(pkt->PAYLOAD != NULL){
+			free(pkt->PAYLOAD);
+		}
 		free(pkt);
 	}
 
@@ -65,7 +68,7 @@
 
 		uint16_t length;
 		memcpy(&length,data+2,sizeof(uint16_t));
-		//Conversion endianess 
+		//Conversion endianess
 		pkt->LENGTH = ntohs(length);
 
 		//Check size payload not exceeded
@@ -82,7 +85,7 @@
 		if(len < 12 && type == PTYPE_DATA){
 			return E_UNCONSISTENT;
 		}
-		
+
 		uint32_t timestamp = 0;
 		memcpy(&timestamp,data+4,sizeof(uint32_t));
 		pkt_set_timestamp(pkt,timestamp);
@@ -121,7 +124,7 @@
 			return E_LENGTH;
 		}
 
-		//Error : buffer too small 
+		//Error : buffer too small
 		if(*len <12){
 			return E_NOMEM;
 		}
@@ -130,7 +133,7 @@
 		uint8_t seqnum = pkt->SEQNUM;
 		uint16_t length = htons(pkt->LENGTH);
 		uint32_t timestamp = pkt->TIMESTAMP;
-		
+
 		memset(buf,0,*len);
 
 		memcpy(buf,&firstPart,sizeof(uint8_t));

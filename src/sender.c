@@ -47,9 +47,9 @@ char buffReadGen[MAX_PAYLOAD_SIZE];
 
 
 /* 	Method used to open a file
-		If (the file doesn't exists) -> create an empty file for writing 
-		Else (the file already exists) -> erase it and create a new empty file in place  
-	At the end of this method 
+		If (the file doesn't exists) -> create an empty file for writing
+		Else (the file already exists) -> erase it and create a new empty file in place
+	At the end of this method
 		- readFromFile is set to TRUE
 		- fdToRead is set or the program is stopped
 	Error 10 */
@@ -63,9 +63,9 @@ void openFile(char* fileToOpen){
 }
 
 
-/* Used to send every packets 
+/* Used to send every packets
 	if tab[x] is null read adn create a packet
-	
+
 	*/
 int sendPkts(int sock){
 
@@ -77,21 +77,21 @@ int sendPkts(int sock){
 		if(pktTmp == NULL || pktTmp == 0){
 			int size = read(fdToRead,buffReadGen,MAX_PAYLOAD_SIZE);
 		    if(size == 0 && lastPacketGenerated == FALSE){
-		    	fprintf(stderr, "ZERO \n");
+		    	//fprintf(stderr, "ZERO \n");
 		    	lastPacketGenerated = TRUE;
 		    	close(fdToRead);
 		    }
 		    pktTmp = pkt_new();
 		    pkt_set_type(pktTmp,PTYPE_DATA);
 		    pkt_set_window(pktTmp,windowSize);
-		    fprintf(stderr, "Je gen le packet %d\n",maxSeqnum);
+		    //fprintf(stderr, "Je gen le packet %d\n",maxSeqnum);
 		    pkt_set_seqnum(pktTmp,maxSeqnum);
 		    maxSeqnum = (maxSeqnum+1)%(256);
 		    if(lastPacketGenerated == FALSE){
 		    	pkt_set_length(pktTmp,size);
 			    pkt_set_payload(pktTmp,buffReadGen,size);
 		    }else{
-		    	fprintf(stderr, "Je gen un pkt vide \n");
+		    	//fprintf(stderr, "Je gen un pkt vide \n");
 		    	pkt_set_length(pktTmp,0);
 		    }
 		    pkt_set_timestamp(pktTmp,0);
@@ -100,14 +100,14 @@ int sendPkts(int sock){
 		}
 
 		char bufTmp[pkt_get_length(pktTmp) + 12];
-		size_t len = sizeof(bufTmp); 
+		size_t len = sizeof(bufTmp);
 		//fprintf(stderr,"indice du pkt que je vais envoyer : %d\n",indice);
 		struct timeval tv;
     	gettimeofday(&tv, NULL);
 
     	uint32_t now = tv.tv_sec % 1000 + tv.tv_usec;
 		uint32_t tsmpPkt = pkt_get_timestamp(pktTmp);
-		
+
 
 		//Not resend if timeout isn't out
 		//fprintf(stderr,"now: %d\n",now);
@@ -115,12 +115,13 @@ int sendPkts(int sock){
 		//fprintf(stderr,"DELTA_TIMEOUT: %d\n",DELTA_TIMEOUT);
 		if(tsmpPkt == 0 || ((now - tsmpPkt ) > DELTA_TIMEOUT)){
 
-			fprintf(stderr,"J'envoie le pkt : %d\n",pkt_get_seqnum(pktTmp));
+			//fprintf(stderr,"J'envoie le pkt : %d\n",pkt_get_seqnum(pktTmp));
 			pkt_set_timestamp(pktTmp,now);
 			if(pkt_encode(pktTmp,bufTmp,&len) == PKT_OK){
 				if((write(sock,bufTmp,len)) == -1){
 			        fprintf(stderr, "Error : write(1)\n");
 			    }
+					pkt_del(pktTmp);
 				numPktSent++;
 			}else{
 				fprintf(stderr, "Erreur sender (30) : encode\n");
@@ -150,11 +151,11 @@ void updateWindow(int nextSeqNum){
 			if(pkt_get_seqnum(pktTmp) == nextSeqNum){
 				return;
 			}else if(pkt_get_seqnum(pktTmp) < nextSeqNum){
-				fprintf(stderr, "Je delete le packet : %d\n",pkt_get_seqnum(pktTmp));
+				//fprintf(stderr, "Je delete le packet : %d\n",pkt_get_seqnum(pktTmp));
 				pkt_del(pktTmp);
 				windowPkt[indicePkt] = 0;
 			}else if(nextSeqNum >=0 && nextSeqNum <=31 && pkt_get_seqnum(pktTmp) >=255-32){
-				fprintf(stderr, "Je delete le packet : %d\n",pkt_get_seqnum(pktTmp));
+				//fprintf(stderr, "Je delete le packet : %d\n",pkt_get_seqnum(pktTmp));
 				pkt_del(pktTmp);
 				windowPkt[indicePkt] = 0;
 			}
@@ -213,13 +214,13 @@ int readForAck(int sfd){
     	}else if( pkt_get_type(ack) == PTYPE_ACK){
     		windowSize = pkt_get_window(ack);
     		//fprintf(stderr, "WINDOW ACK : %d\n",windowSize);
-    		fprintf(stderr, "pkt_get_seqnum ACK : %d\n",pkt_get_seqnum(ack));
+    		//fprintf(stderr, "pkt_get_seqnum ACK : %d\n",pkt_get_seqnum(ack));
     		//Delete useless pkt
     		currentSeqnum = pkt_get_seqnum(ack);
     		updateWindow(pkt_get_seqnum(ack));
 
     		//Treatment when window equals zero
-    		// We reopen the window only if we got an ack that told us to 
+    		// We reopen the window only if we got an ack that told us to
     		if(windowSize == 0){
     			readForAck(sfd);
     		}
@@ -230,6 +231,7 @@ int readForAck(int sfd){
 
     	}
 
+			pkt_del(ack);
     }
     else{
     	//fprintf(stderr, "ON READ TIMEOUT \n");
@@ -253,7 +255,7 @@ int main (int argc, char * argv[]){
 	while ((c = getopt (argc, argv, "f:")) != -1){
 		switch (c){
 			case 'f':
-				// Open file 
+				// Open file
 				openFile(optarg);
 				break;
 			default:
@@ -281,7 +283,7 @@ int main (int argc, char * argv[]){
 	struct sockaddr_in6 addr;
 	const char* error = NULL;
 	//Real address treatment
-    error = real_address(ip,&addr); 
+    error = real_address(ip,&addr);
     if(error != NULL){
     	fprintf(stderr, "Error receiver (12) : %s\n", error);
     	exit(12);
@@ -294,15 +296,15 @@ int main (int argc, char * argv[]){
     int keepListening = TRUE;
 
     while(keepListening){
-	    
+
     	keepListening = sendPkts(sock);
     	if(keepListening == 0){
     		//envoyer un packet vide
     		while(readForAck(sock)){
     			sendPkts(sock);
     		}
-    		fprintf(stderr, "FIN \n");
-    		exit(0); 
+    		fprintf(stderr, "End, file successfully sent !\n");
+    		exit(0);
     	}
     	readForAck(sock);
 

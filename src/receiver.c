@@ -34,7 +34,7 @@ int fdToWrite = 0;
 
 int currentPktGlob=0;
 int currentSeqnum = -1;
-uint32_t lastTmstp = -1;
+uint32_t lastTmstp = 0;
 
 // The socket to listen
 int sock;
@@ -52,9 +52,9 @@ pkt_status_code codePkt;
 
 
 /* 	Method used to open a file
-		If (the file doesn't exists) -> create an empty file for writing 
-		Else (the file already exists) -> erase it and create a new empty file in place  
-	At the end of this method 
+		If (the file doesn't exists) -> create an empty file for writing
+		Else (the file already exists) -> erase it and create a new empty file in place
+	At the end of this method
 		- writeONAFile is set to TRUE
 		- fileToWrite is set or the program is stopped
 	Error 10 */
@@ -89,11 +89,11 @@ ssize_t readPkt(const int sfd){
 	socklen_t taille = sizeof(from);
 
     /* Pendant 5 secondes maxi */
-    tv.tv_sec = 5;
+    tv.tv_sec = 10;
     tv.tv_usec = 0;
 
 	FD_SET(sfd, &rfds);
-    	
+
     retval = select(FD_SETSIZE, &rfds, NULL, NULL, &tv);
 	/* Considérer tv comme indéfini maintenant ! */
 
@@ -101,11 +101,11 @@ ssize_t readPkt(const int sfd){
         fprintf(stderr, "Error receiver (20): select\n");
     }
     else if (retval) {
-        rec = recvfrom(sfd, bufferPkt, sizeof(bufferPkt), 
+        rec = recvfrom(sfd, bufferPkt, sizeof(bufferPkt),
 				   0, (struct sockaddr *)&from, &taille);
 
 
-        if (connect(sfd, (struct sockaddr *) &from, 
+        if (connect(sfd, (struct sockaddr *) &from,
                 sizeof(struct sockaddr_in6)) != 0){
     		fprintf(stderr, "Error receiver (23) : connect\n");
         	return -1;
@@ -117,7 +117,7 @@ ssize_t readPkt(const int sfd){
 	    }
     }
     else{
-        fprintf(stderr, "No data for 10 seconds\n");
+        fprintf(stderr, "No data for 30 seconds end of program\n");
         if(writeOnAFile == TRUE){
     		close(fdToWrite);
     	}
@@ -125,7 +125,7 @@ ssize_t readPkt(const int sfd){
     }
 
     return rec;
-} 
+}
 
 void sendAck(const int sfd){
 	pkt_t *ack = pkt_new();
@@ -135,9 +135,9 @@ void sendAck(const int sfd){
 	pkt_set_length(ack,0);
 	pkt_set_timestamp(ack,lastTmstp);
 	char bufTmp[12];
-	size_t len = sizeof(bufTmp); 
+	size_t len = sizeof(bufTmp);
 	if(pkt_encode(ack,bufTmp,&len) == PKT_OK){
-		fprintf(stderr, "ACK : %d\n",(currentSeqnum));
+		//fprintf(stderr, "ACK : %d\n",(currentSeqnum));
 		if((write(sfd,bufTmp,len)) == -1){
             fprintf(stderr, "Error : write(5)\n");
        	}
@@ -149,7 +149,7 @@ void sendAck(const int sfd){
 }
 
 
-/* Method used to write pkts, write every valid pkt 
+/* Method used to write pkts, write every valid pkt
 	Return 0 if the length of pkt == 0 (Last pkt) */
 int writePkt(){
 	int ret=1;
@@ -166,7 +166,7 @@ int writePkt(){
 		// Test pck existe
 		if(windowPkt[numToStart] == 0 ){
        	 	//fprintf(stderr, "No more pkt to write\n");
-       	 	return ret;	
+       	 	return ret;
 		}
 		pkt_t *currPkt = windowPkt[numToStart];
 		if(pkt_get_seqnum(currPkt) != currentSeqnum){
@@ -177,7 +177,7 @@ int writePkt(){
         	fprintf(stderr, "Error : write(1)\n");
 		}
 		size--;
-		fprintf(stderr, "J'écris %d\n",pkt_get_seqnum(currPkt));
+		//fprintf(stderr, "J'écris %d\n",pkt_get_seqnum(currPkt));
 		ret = pkt_get_length(currPkt);
 		windowPkt[numToStart] = 0;
 		//currentPkt = (numToStart+1)%WINDOW_SIZE;
@@ -185,7 +185,7 @@ int writePkt(){
 		pkt_del(currPkt);
 		currentPktGlob = (currentPktGlob+1)%WINDOW_SIZE;
 		numToStart =  (numToStart+1)%WINDOW_SIZE;
-	}	
+	}
 	return ret;
 }
 
@@ -203,7 +203,7 @@ int main (int argc, char * argv[]){
 	while ((c = getopt (argc, argv, "f:")) != -1){
 		switch (c){
 			case 'f':
-				// Open file 
+				// Open file
 				openFile(optarg);
 				break;
 			default:
@@ -231,7 +231,7 @@ int main (int argc, char * argv[]){
 	struct sockaddr_in6 addr;
 	const char* error = NULL;
 	//Real address treatment
-    error = real_address(ip,&addr); 
+    error = real_address(ip,&addr);
     if(error != NULL){
     	fprintf(stderr, "Error receiver (12) : %s\n", error);
     	exit(12);
@@ -241,20 +241,20 @@ int main (int argc, char * argv[]){
     //Both last args are useless because we won't use them
     sock = create_socket(&addr,port,NULL,-1);
 
-    //First we create every packets in the window 
+    //First we create every packets in the window
     fillWindow();
 
     FD_ZERO(&rfds);
 
     while(keepListening){
-        /*Reset suite eu trigger du select*/ 
+        /*Reset suite eu trigger du select*/
     	pkt_t *pktForThisLoop = pkt_new();
     	ssize_t lengthRead = readPkt(sock);
     	codePkt = pkt_decode(bufferPkt,lengthRead,pktForThisLoop);
 
     	if(codePkt != PKT_OK){
     		//TODO traiter erreurs usedne à une
-    		fprintf(stderr, "Error pkt_decode\n");
+    		//fprintf(stderr, "Error pkt_decode\n");
     		sendAck(sock);
     	}else if( pkt_get_type(pktForThisLoop) == PTYPE_DATA){
     		int seqNumReceived = pkt_get_seqnum(pktForThisLoop);
@@ -268,22 +268,24 @@ int main (int argc, char * argv[]){
 	    				exit(0);
 	    			}
     			}
-    			currentSeqnum = seqNumReceived; 
+    			currentSeqnum = seqNumReceived;
     		}
-			
-			fprintf(stderr, "Je reçois : %d\n", seqNumReceived);
+
+			lastTmstp = pkt_get_timestamp(pktForThisLoop);
+			//fprintf(stderr,"TMSssP %u\n",pkt_get_timestamp(pktForThisLoop));
+			//fprintf(stderr, "Je reçois : %d\n", seqNumReceived);
 			if(currentSeqnum == seqNumReceived){
-				fprintf(stderr, "Et en plus je vais écrire !\n");
+				//fprintf(stderr, "Et en plus je vais écrire !\n");
     			windowPkt[currentPktGlob] = pktForThisLoop;
     			if(writePkt() == 0){
 	    			keepListening = FALSE;
 	    		}
+
 	    		size++;
 	    		sendAck(sock);
     		}else if(seqNumReceived <= currentSeqnum+WINDOW_SIZE){
     			size++;
     			windowPkt[currentPktGlob+(seqNumReceived- currentSeqnum)%WINDOW_SIZE] = pktForThisLoop;
-    			lastTmstp = pkt_get_timestamp(pktForThisLoop);
     		}else{
     			sendAck(sock);
     			fprintf(stderr, "Receiver error (31) : packet outside the window \n");
@@ -296,7 +298,7 @@ int main (int argc, char * argv[]){
     	}
     }
 
-    fprintf(stderr, "END OF FILE \n");
+    fprintf(stderr, "End, file successfully received !\n");
 
     if(writeOnAFile == TRUE){
     	close(fdToWrite);
