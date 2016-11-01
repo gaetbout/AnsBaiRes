@@ -64,7 +64,7 @@ void openFile(char* fileToOpen){
 
 
 /* Used to send every packets
-	if tab[x] is null read adn create a packet
+	if tab[x] is null read and create a packet
 
 	*/
 int sendPkts(int sock){
@@ -142,7 +142,9 @@ int sendPkts(int sock){
 
 	return 1;
 }
-
+/* Method ued to delete every useless pkt
+* used after reception of an ack
+* */
 void updateWindow(int nextSeqNum){
 	while(1){
 		//Check if there a pkt
@@ -166,19 +168,15 @@ void updateWindow(int nextSeqNum){
 		}
 	}
 }
-
-/*int windowEqualsZero(int sfd){
-	int ret = 1;
-
-	return ret;
-}*/
-
+/* Read for an ack
+* While there is ack on the fd it keep reading
+* If there is no ack for x usec we check if there no pkt to resend due to timeout
+*/
 int readForAck(int sfd){
     struct timeval tv;
     int retval;
     ssize_t rec=0;
 
-    /* Pendant 5 secondes maxi */
     tv.tv_sec = 0;
     tv.tv_usec = 1;
 
@@ -200,7 +198,7 @@ int readForAck(int sfd){
     		exit(21);
 	    }
 	    if(rec== 0){
-	    	fprintf(stderr, "REC == 0\n");
+	    	//fprintf(stderr, "REC == 0\n");
 	    	return 0;
 	    }
 
@@ -208,7 +206,7 @@ int readForAck(int sfd){
     	pkt_status_code codePkt = pkt_decode(bufferAck,rec,ack);
 
 		if(codePkt != PKT_OK){
-    		//TODO traiter erreurs une à une
+
     		fprintf(stderr, "Error receiver (22) : decode failed\n");
     		//exit(22);
     	}else if( pkt_get_type(ack) == PTYPE_ACK){
@@ -227,7 +225,7 @@ int readForAck(int sfd){
     	}
     	//Not a ack type packet ==> ignored
     	else{
-    		//Todo faire un taux de corruption ???
+    		// Here we can implements a corruption rate
 
     	}
 
@@ -240,7 +238,10 @@ int readForAck(int sfd){
 
     return rec;
 }
-
+/*
+* Methode used to delete every pkt ta still left in the window
+* Called at the end of the program
+*/
 void freeLastPkt(){
 	int i;
 	for (i = 0;i<MAX_WINDOW_SIZE+1;i++){
@@ -256,7 +257,7 @@ int main (int argc, char * argv[]){
 	int port = 0;
 	char* portErrorPtr;
 
-
+	// Usage check
 	if (argc != 3 && argc !=5 ){
 		fprintf(stderr,"Use %s [-f X] hostname port (X is the name of where the file will be sent)\n",argv[0]);
 		return -1;

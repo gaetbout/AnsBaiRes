@@ -24,6 +24,7 @@
 #include <string.h>
 #include <time.h>
 
+//Bolean def
 #define FALSE 0
 #define TRUE 1
 
@@ -68,7 +69,7 @@ void openFile(char* fileToOpen){
 	fprintf(stderr,"File %s successfully opened\n",fileToOpen);
 }
 
-/* Method used to fill the window of pkt with new empty pkt */
+/* Method used to fill the window of 0 */
 void fillWindow(){
 	int i;
 	for (i =0;i<WINDOW_SIZE;i++){
@@ -88,7 +89,7 @@ ssize_t readPkt(const int sfd){
 	struct sockaddr_in6 from;
 	socklen_t taille = sizeof(from);
 
-    /* Pendant 5 secondes maxi */
+    /* Pendant 10 secondes maxi */
     tv.tv_sec = 10;
     tv.tv_usec = 0;
 
@@ -117,7 +118,7 @@ ssize_t readPkt(const int sfd){
 	    }
     }
     else{
-        fprintf(stderr, "No data for 30 seconds end of program\n");
+        fprintf(stderr, "No data for 10 seconds end of program\n");
         if(writeOnAFile == TRUE){
     		close(fdToWrite);
     	}
@@ -155,6 +156,7 @@ int writePkt(){
 	int ret=1;
 	int numToStart=0;
 	int i;
+	//Loop to find the first pkt to send
 	for (i = 0;i<WINDOW_SIZE;i++){
 		if(windowPkt[i] != 0 && currentSeqnum ==pkt_get_seqnum(windowPkt[i])){
 			numToStart=i;
@@ -163,7 +165,7 @@ int writePkt(){
 	}
 
 	while(1){
-		// Test pck existe
+		// Test pkt exists
 		if(windowPkt[numToStart] == 0 ){
        	 	//fprintf(stderr, "No more pkt to write\n");
        	 	return ret;
@@ -172,7 +174,7 @@ int writePkt(){
 		if(pkt_get_seqnum(currPkt) != currentSeqnum){
 			return ret;
 		}
-		//Tu write le paquet
+		//Write pkt
 		if(write(fdToWrite,pkt_get_payload(currPkt),pkt_get_length(currPkt)) == -1){
         	fprintf(stderr, "Error : write(1)\n");
 		}
@@ -181,6 +183,7 @@ int writePkt(){
 		ret = pkt_get_length(currPkt);
 		windowPkt[numToStart] = 0;
 		//currentPkt = (numToStart+1)%WINDOW_SIZE;
+		//Set current seqnum
 		currentSeqnum = (pkt_get_seqnum(currPkt)+1)%256;
 		pkt_del(currPkt);
 		currentPktGlob = (currentPktGlob+1)%WINDOW_SIZE;
@@ -196,6 +199,7 @@ int main (int argc, char * argv[]){
 	char* portErrorPtr;
 	int keepListening = TRUE;
 
+	//Program test usage
 	if (argc != 3 && argc !=5 ){
 		fprintf(stderr,"Use %s [-f X] hostname port (X is the name of where the file will be sent)\n",argv[0]);
 		return -1;
@@ -247,19 +251,19 @@ int main (int argc, char * argv[]){
     FD_ZERO(&rfds);
 
     while(keepListening){
-        /*Reset suite eu trigger du select*/
+      /*Reset suite eu trigger du select*/
     	pkt_t *pktForThisLoop = pkt_new();
     	ssize_t lengthRead = readPkt(sock);
     	codePkt = pkt_decode(bufferPkt,lengthRead,pktForThisLoop);
 
     	if(codePkt != PKT_OK){
-    		//TODO traiter erreurs usedne à une
+
     		//fprintf(stderr, "Error pkt_decode\n");
     		sendAck(sock);
     	}else if( pkt_get_type(pktForThisLoop) == PTYPE_DATA){
     		int seqNumReceived = pkt_get_seqnum(pktForThisLoop);
+  			//Test if the first seqnum equals 0
     		if(currentSeqnum==-1){
-    			//Test if the first segment equals 0
     			// if not stops the program
     			if(seqNumReceived != 0){
     				fprintf(stderr, "Wrong first seqnum : %d in place of 0\n",seqNumReceived);
@@ -270,10 +274,11 @@ int main (int argc, char * argv[]){
     			}
     			currentSeqnum = seqNumReceived;
     		}
-				
+
 			lastTmstp = pkt_get_timestamp(pktForThisLoop);
 			//fprintf(stderr,"TMSssP %u\n",pkt_get_timestamp(pktForThisLoop));
 			//fprintf(stderr, "Je reçois : %d\n", seqNumReceived);
+			//Expected seqnum
 			if(currentSeqnum == seqNumReceived){
 				//fprintf(stderr, "Et en plus je vais écrire !\n");
     			windowPkt[currentPktGlob] = pktForThisLoop;
@@ -283,10 +288,12 @@ int main (int argc, char * argv[]){
 
 	    		size++;
 	    		sendAck(sock);
-    		}else if(seqNumReceived <= currentSeqnum+WINDOW_SIZE){
+    		}//Seqnum in the window
+				else if(seqNumReceived <= currentSeqnum+WINDOW_SIZE){
     			size++;
     			windowPkt[currentPktGlob+(seqNumReceived- currentSeqnum)%WINDOW_SIZE] = pktForThisLoop;
-    		}else{
+    		}//Seqnum out of window
+				else{
     			sendAck(sock);
     			fprintf(stderr, "Receiver error (31) : packet outside the window \n");
     		}
