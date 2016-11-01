@@ -121,7 +121,6 @@ int sendPkts(int sock){
 				if((write(sock,bufTmp,len)) == -1){
 			        fprintf(stderr, "Error : write(1)\n");
 			    }
-					pkt_del(pktTmp);
 				numPktSent++;
 			}else{
 				fprintf(stderr, "Erreur sender (30) : encode\n");
@@ -138,6 +137,7 @@ int sendPkts(int sock){
 			return 0;
 
 		}
+		//pkt_del(pktTmp);
 	}
 
 	return 1;
@@ -241,6 +241,15 @@ int readForAck(int sfd){
     return rec;
 }
 
+void freeLastPkt(){
+	int i;
+	for (i = 0;i<MAX_WINDOW_SIZE+1;i++){
+		if(windowPkt[i] != NULL && windowPkt[i] != 0){
+			pkt_del(windowPkt[i]);
+		}
+	}
+}
+
 int main (int argc, char * argv[]){
 	char c;
 	char* ip = NULL;
@@ -303,15 +312,13 @@ int main (int argc, char * argv[]){
     		while(readForAck(sock)){
     			sendPkts(sock);
     		}
+				freeLastPkt();
     		fprintf(stderr, "End, file successfully sent !\n");
     		exit(0);
     	}
     	readForAck(sock);
 
     }
-
-    //Envoyer un pkt vide
-
 }
 
 //	    fprintf(stderr,"Timestamp: %d\n",(int)time(NULL));
